@@ -1,6 +1,10 @@
 # aok
 ATLAS Ocean Kd (AOK) - calculating ocean Kd values using ICESat-2
 
+> [!WARNING]
+> This package is currently under active development to produce the most reliable calculations of Kd values.
+> The code is therefore unstable, may have significant uncertainties, and should be used with caution.
+
 # Quickstart
 
 ## Calculating Kd
