@@ -15,6 +15,11 @@ Coming soon...
 
 # Contributing
 
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md) 
+
+Our team follows the [Contributor Covenant Code of Conduct][homepage], version 2.1, available at
+[https://www.contributor-covenant.org/version/2/1/code_of_conduct.html][v2.1].
+
 ## Team members
 
 We encourage all active team members with repository access to work directly on their own branch, creating one branch for each "task" they are working on.
