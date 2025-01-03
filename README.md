@@ -32,4 +32,19 @@ We welcome contributions from any user.
 Some guidelines on [ways to contribute](https://icepyx.readthedocs.io/en/latest/contributing/contribution_guidelines.html) and [how to contribute](https://icepyx.readthedocs.io/en/latest/contributing/how_to_contribute.html) are available in the [icepyx](https://icepyx.readthedocs.io/en/latest/index.html) documentation.
 
 ## Recognizing Contributions
-Coming soon...
+Our full attribution guidelines are coming soon.
+
+We use the [All Contributors Specification](https://allcontributors.org/docs/en/specification)
+to recognize our incredible contributor team.
+
+### Contributors
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
