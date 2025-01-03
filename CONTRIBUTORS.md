@@ -2,7 +2,7 @@ Project Contributors
 --------------------
 
 The following people have made contributions to this project (in alphabetical order).
-Thanks goes to these wonderful people (`emoji key <https://allcontributors.org/docs/en/emoji-key>`_):
+Thanks goes to these wonderful people [emoji key](https://allcontributors.org/docs/en/emoji-key):
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->

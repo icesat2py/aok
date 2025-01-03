@@ -5,6 +5,8 @@ ATLAS Ocean Kd (AOK) - calculating ocean Kd values using ICESat-2
 > This package is currently under active development to produce the most reliable calculations of Kd values.
 > The code is therefore unstable, may have significant uncertainties, and should be used with caution.
 
+[![All Contributors](https://img.shields.io/github/all-contributors/icesat2py/aok?color=ee8449&style=flat-square)](#contributors)
+
 # Quickstart
 
 ## Calculating Kd
@@ -35,5 +37,5 @@ Some guidelines on [ways to contribute](https://icepyx.readthedocs.io/en/latest/
 Our full attribution guidelines are coming soon.
 
 We use the [All Contributors Specification](https://allcontributors.org/docs/en/specification)
-to recognize our incredible [contributor team](CONTRIBUTORS.rst).
+to recognize our incredible [contributor team](CONTRIBUTORS.md).
 
