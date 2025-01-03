@@ -1,12 +1,17 @@
 {
   "projectName": "aok",
   "projectOwner": "icesat2py",
-  "files": [
-    "README.md"
-  ],
   "commitType": "docs",
   "commitConvention": "angular",
   "contributorsPerLine": 7,
+  "contributorsSortAlphabetically": true,
+  "files": [
+    "CONTRIBUTORS.rst"
+  ],
+  "imageSize": 100,
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "skipCi": true,
   "contributors": [
     {
       "login": "kelseybisson",
