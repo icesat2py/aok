@@ -1,4 +1,22 @@
 {
   "projectName": "aok",
-  "projectOwner": "icesat2py"
+  "projectOwner": "icesat2py",
+  "files": [
+    "README.md"
+  ],
+  "commitType": "docs",
+  "commitConvention": "angular",
+  "contributorsPerLine": 7,
+  "contributors": [
+    {
+      "login": "kelseybisson",
+      "name": "Kelsey Bisson",
+      "avatar_url": "https://avatars.githubusercontent.com/u/48059682?v=4",
+      "profile": "http://bisson.work",
+      "contributions": [
+        "code",
+        "ideas"
+      ]
+    }
+  ]
 }
