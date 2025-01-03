@@ -47,6 +47,7 @@ to recognize our incredible contributor team.
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="http://bisson.work"><img src="https://avatars.githubusercontent.com/u/48059682?v=4?s=100" width="100px;" alt="Kelsey Bisson"/><br /><sub><b>Kelsey Bisson</b></sub></a><br /><a href="#code-kelseybisson" title="Code">💻</a> <a href="#ideas-kelseybisson" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://blogs.oregonstate.edu/coastalseds/"><img src="https://avatars.githubusercontent.com/u/130190809?v=4?s=100" width="100px;" alt="Emily Eidam"/><br /><sub><b>Emily Eidam</b></sub></a><br /><a href="#code-emilyeidam" title="Code">💻</a> <a href="#fundingFinding-emilyeidam" title="Funding Finding">🔍</a> <a href="#ideas-emilyeidam" title="Ideas, Planning, & Feedback">🤔</a> <a href="#projectManagement-emilyeidam" title="Project Management">📆</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/gloverha"><img src="https://avatars.githubusercontent.com/u/105296359?v=4?s=100" width="100px;" alt="Hannah Glover"/><br /><sub><b>Hannah Glover</b></sub></a><br /><a href="#code-gloverha" title="Code">💻</a> <a href="#ideas-gloverha" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
   </tbody>
 </table>
