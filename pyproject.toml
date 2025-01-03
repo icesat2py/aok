@@ -1,0 +1,153 @@
+[project]
+name = "aok"
+description = "Calculating Ocean Kd from ICESat-2 (ATLAS) data"
+license = {file = "LICENSE"}
+readme = "README.md"
+
+requires-python = ">=3.11"
+dynamic = ["version", "dependencies"]
+
+authors = [
+  {name = "AOK Development Team", email = "jbscheick@gmail.com"},
+]
+maintainers = [
+  {name = "AOK Development Team", email = "jbscheick@gmail.com"},
+]
+
+classifiers=[
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: GIS",
+  "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+#Homepage = "https://icepyx.readthedocs.io"
+#Documentation = "https://icepyx.readthedocs.io"
+Repository = "https://github.com/icesat2py/aok"
+Issues = "https://github.com/icesat2py/aok/issues"
+#Changelog = "https://icepyx.readthedocs.io/en/latest/user_guide/changelog/index.html"
+
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=66", "wheel", "setuptools_scm"]
+
+[tool.setuptools]
+py-modules = ["_aok_version"]
+
+
+##### DEPENDENCIES #####
+
+[tool.setuptools.dynamic]
+dependencies = [
+  "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pre-commit",
+  "pyright",
+  "pytest",
+]
+complete = ["aok[dev]"]
+
+
+##### SETUPTOOLS #####
+
+[tool.setuptools.packages.find]
+exclude = ["*tests"]
+
+[tool.setuptools_scm]
+version_file = "_aok_version.py"
+version_file_template = 'version = "{version}"'
+local_scheme = "node-and-date"
+fallback_version = "unknown"
+
+
+##### LINTING, FORMATTING, TYPING #####
+
+[tool.codespell]
+ignore-words-list = "aok"
+
+[tool.pyright]
+pythonVersion = "3.11"
+# More relaxed option: "standard"
+typeCheckingMode = "strict"
+include = [
+  "aok",
+]
+exclude = [
+  "**/__pycache__",
+  "icepyx/tests",
+]
+# ignore = [
+#   "icepyx/core/read.py",
+# ]
+
+[tool.ruff]
+# DevGoal: Lint and format all Jupyter Notebooks, remove below.
+extend-exclude = ["*.ipynb"]
+
+# [tool.ruff.format]
+# docstring-code-format = true
+# docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+# DevGoal: Enable "ARG" and "B" rulesets ASAP!
+select = [
+  # "ARG",  # flake8-unused-arguments
+  # "B",    # flake8-bugbear
+  "C4",   # flake8-comprehensions
+  "E",    # pycodestyle
+  # "EM",   # flake8-errmsg
+  "EXE",  # flake8-executable
+  "F",    # pyflakes
+  "G",    # flake8-logging-format
+  "I",    # isort
+  "ICN",  # flake8-import-conventions
+  "NPY",  # NumPy specific rules
+  # "PD",   # pandas-vet
+  "PGH",  # pygrep-hooks
+  "PIE",  # flake8-pie
+  # "PL",   # pylint
+  # "PT",   # flake8-pytest-style
+  # "PTH",  # flake8-use-pathlib
+  # "RET",  # flake8-return
+  # "RUF",  # Ruff-specific
+  "SIM",  # flake8-simplify
+  # "T20",  # flake8-print
+  # "UP",   # pyupgrade
+  "YTT",  # flake8-2020
+]
+ignore = [
+  # Line too long
+  # NOTE: This is a formatting concern. Formatter handles long lines of code,
+  # but allows inline comments to be infinitely long (automatically formatting
+  # them can have unintended consequences). In our codebase, we have a lot of
+  # overlong comments.
+  # See: https://github.com/psf/black/issues/1713#issuecomment-1357045092
+  # "E501",
+  # "SIM105",  # suppressible-exception
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore import violations in all `__init__.py` files and doc config
+"__init__.py" = ["E402", "F401"]
+"doc/source/conf.py" = ["E402", "F401"]
+
+# Ignore line length in test file containing some very long test strings
+# "test_granules.py" = ["E501"]
+
+# Ignore too many leading '#' for block comment
+# "*/tests/*" = ["E266"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
