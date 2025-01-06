@@ -4,6 +4,8 @@ ATLAS Ocean Kd (AOK) - calculating ocean Kd values using ICESat-2
 > [!WARNING]
 > This package is currently under active development to produce the most reliable calculations of Kd values.
 > The code is therefore unstable, may have significant uncertainties, and should be used with caution.
+> This repository contains Python code developed in collaboration to replicate the functionality of the original MATLAB scripts (https://github.com/emilyeidam/icesat-2_kdph
+) by Dr. Emily Eidam (emily.eidam@oregonstate.edu). The code facilitates processing ICESat-2 data to calculate the diffuse attenuation coefficient (Kd) based on space-based lidar photon profiles, following methods described in the original MATLAB code. Please cite appropriately both Python and the MATLAB version under the GNU GPLv3 license if you use this code in your research.
 
 [![All Contributors](https://img.shields.io/github/all-contributors/icesat2py/aok?color=ee8449&style=flat-square)](#contributors)
 
