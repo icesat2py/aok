@@ -5,8 +5,6 @@ import re
 import sys
 
 from config import get_args
-import pandas as pd
-
 from kd_utils.bathy_processing import process_subsurface_photon_filtering
 from kd_utils.data_processing import (
     Extract_sea_photons,
@@ -22,6 +20,7 @@ from kd_utils.visualization import (
     plot_kd_photons,
     plot_photon_quality_flags,
 )
+import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
