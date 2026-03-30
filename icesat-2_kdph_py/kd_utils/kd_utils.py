@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding: utf-8
 
 #####
 # This group of functions processes ICESat-2 data and creates a bathymetric model.
@@ -14,40 +13,32 @@
 # 8. Calculate bathymetric height (get_bath_height())
 # 9. Produce figures (produce_figures())
 #####
-import os
-# os.environ["PROJ_LIB"] = r"C:\Users\wayne\anaconda3\Library\share\proj"
+from datetime import datetime
 
+# os.environ["PROJ_LIB"] = r"C:\Users\wayne\anaconda3\Library\share\proj"
 import io
+import logging
+import math
 import os
 import re
 import time
-import math
-import h5py
-import logging
-import netCDF4
-import numpy as np
+
 import geopandas as gpd
-
-import pandas as pd
-from datetime import datetime
-import matplotlib.pyplot as plt
+import h5py
 import hdbscan
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-
-import argparse
-import subprocess
-# import fiona
-import utm
-import pyproj
-from pyproj import Transformer, Proj
 
 # from pyproj import Transformer
-from matplotlib.widgets import LassoSelector
-from matplotlib.path import Path
+import matplotlib.pyplot as plt
+import netCDF4
+import numpy as np
+import pandas as pd
 
-from sklearn.cluster import DBSCAN
+# import fiona
+from pyproj import Proj, Transformer
+from sklearn.preprocessing import MinMaxScaler
 
-#this function from icesat2_toolkit
+
+# this function from icesat2_toolkit
 # PURPOSE: read ICESat-2 ATL03 HDF5 data files
 def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     """
@@ -71,9 +62,9 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     """
     # Open the HDF5 file for reading
     if isinstance(FILENAME, io.IOBase):
-        fileID = h5py.File(FILENAME, 'r')
+        fileID = h5py.File(FILENAME, "r")
     else:
-        fileID = h5py.File(os.path.expanduser(FILENAME), 'r')
+        fileID = h5py.File(os.path.expanduser(FILENAME), "r")
 
     # Output HDF5 file information
     logging.info(fileID.filename)
@@ -85,12 +76,12 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
 
     # read each input beam within the file
     IS2_atl03_beams = []
-    for gtx in [k for k in fileID.keys() if bool(re.match(r'gt\d[lr]',k))]:
+    for gtx in [k for k in fileID.keys() if bool(re.match(r"gt\d[lr]", k))]:
         # check if subsetted beam contains data
         # check in both the geolocation and heights groups
         try:
-            fileID[gtx]['geolocation']['segment_id']
-            fileID[gtx]['heights']['delta_time']
+            fileID[gtx]["geolocation"]["segment_id"]
+            fileID[gtx]["heights"]["delta_time"]
         except KeyError:
             pass
         else:
@@ -100,71 +91,71 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     for gtx in IS2_atl03_beams:
         # get each HDF5 variable
         IS2_atl03_mds[gtx] = {}
-        IS2_atl03_mds[gtx]['heights'] = {}
-        IS2_atl03_mds[gtx]['geolocation'] = {}
-        IS2_atl03_mds[gtx]['bckgrd_atlas'] = {}
-        IS2_atl03_mds[gtx]['geophys_corr'] = {}
+        IS2_atl03_mds[gtx]["heights"] = {}
+        IS2_atl03_mds[gtx]["geolocation"] = {}
+        IS2_atl03_mds[gtx]["bckgrd_atlas"] = {}
+        IS2_atl03_mds[gtx]["geophys_corr"] = {}
         # ICESat-2 Measurement Group
-        for key,val in fileID[gtx]['heights'].items():
-            IS2_atl03_mds[gtx]['heights'][key] = val[:]
+        for key, val in fileID[gtx]["heights"].items():
+            IS2_atl03_mds[gtx]["heights"][key] = val[:]
         # ICESat-2 Geolocation Group
-        for key,val in fileID[gtx]['geolocation'].items():
-            IS2_atl03_mds[gtx]['geolocation'][key] = val[:]
+        for key, val in fileID[gtx]["geolocation"].items():
+            IS2_atl03_mds[gtx]["geolocation"][key] = val[:]
         # ICESat-2 Background Photon Rate Group
-        for key,val in fileID[gtx]['bckgrd_atlas'].items():
-            IS2_atl03_mds[gtx]['bckgrd_atlas'][key] = val[:]
+        for key, val in fileID[gtx]["bckgrd_atlas"].items():
+            IS2_atl03_mds[gtx]["bckgrd_atlas"][key] = val[:]
         # ICESat-2 Geophysical Corrections Group: Values for tides (ocean,
         # solid earth, pole, load, and equilibrium), inverted barometer (IB)
         # effects, and range corrections for tropospheric delays
-        for key,val in fileID[gtx]['geophys_corr'].items():
-            IS2_atl03_mds[gtx]['geophys_corr'][key] = val[:]
+        for key, val in fileID[gtx]["geophys_corr"].items():
+            IS2_atl03_mds[gtx]["geophys_corr"][key] = val[:]
 
         # Getting attributes of included variables
         if ATTRIBUTES:
             # Getting attributes of IS2_atl03_mds beam variables
             IS2_atl03_attrs[gtx] = {}
-            IS2_atl03_attrs[gtx]['heights'] = {}
-            IS2_atl03_attrs[gtx]['geolocation'] = {}
-            IS2_atl03_attrs[gtx]['bckgrd_atlas'] = {}
-            IS2_atl03_attrs[gtx]['geophys_corr'] = {}
+            IS2_atl03_attrs[gtx]["heights"] = {}
+            IS2_atl03_attrs[gtx]["geolocation"] = {}
+            IS2_atl03_attrs[gtx]["bckgrd_atlas"] = {}
+            IS2_atl03_attrs[gtx]["geophys_corr"] = {}
             # Global Group Attributes
-            for att_name,att_val in fileID[gtx].attrs.items():
+            for att_name, att_val in fileID[gtx].attrs.items():
                 IS2_atl03_attrs[gtx][att_name] = att_val
             # ICESat-2 Measurement Group
-            for key,val in fileID[gtx]['heights'].items():
-                IS2_atl03_attrs[gtx]['heights'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['heights'][key][att_name]=att_val
+            for key, val in fileID[gtx]["heights"].items():
+                IS2_atl03_attrs[gtx]["heights"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["heights"][key][att_name] = att_val
             # ICESat-2 Geolocation Group
-            for key,val in fileID[gtx]['geolocation'].items():
-                IS2_atl03_attrs[gtx]['geolocation'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['geolocation'][key][att_name]=att_val
+            for key, val in fileID[gtx]["geolocation"].items():
+                IS2_atl03_attrs[gtx]["geolocation"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["geolocation"][key][att_name] = att_val
             # ICESat-2 Background Photon Rate Group
-            for key,val in fileID[gtx]['bckgrd_atlas'].items():
-                IS2_atl03_attrs[gtx]['bckgrd_atlas'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['bckgrd_atlas'][key][att_name]=att_val
+            for key, val in fileID[gtx]["bckgrd_atlas"].items():
+                IS2_atl03_attrs[gtx]["bckgrd_atlas"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["bckgrd_atlas"][key][att_name] = att_val
             # ICESat-2 Geophysical Corrections Group
-            for key,val in fileID[gtx]['geophys_corr'].items():
-                IS2_atl03_attrs[gtx]['geophys_corr'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['geophys_corr'][key][att_name]=att_val
+            for key, val in fileID[gtx]["geophys_corr"].items():
+                IS2_atl03_attrs[gtx]["geophys_corr"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["geophys_corr"][key][att_name] = att_val
 
     # ICESat-2 spacecraft orientation at time
-    IS2_atl03_mds['orbit_info'] = {}
-    IS2_atl03_attrs['orbit_info'] = {}
-    for key,val in fileID['orbit_info'].items():
-        IS2_atl03_mds['orbit_info'][key] = val[:]
+    IS2_atl03_mds["orbit_info"] = {}
+    IS2_atl03_attrs["orbit_info"] = {}
+    for key, val in fileID["orbit_info"].items():
+        IS2_atl03_mds["orbit_info"][key] = val[:]
         # Getting attributes of group and included variables
         if ATTRIBUTES:
             # Global Group Attributes
-            for att_name,att_val in fileID['orbit_info'].attrs.items():
-                IS2_atl03_attrs['orbit_info'][att_name] = att_val
+            for att_name, att_val in fileID["orbit_info"].attrs.items():
+                IS2_atl03_attrs["orbit_info"][att_name] = att_val
             # Variable Attributes
-            IS2_atl03_attrs['orbit_info'][key] = {}
-            for att_name,att_val in val.attrs.items():
-                IS2_atl03_attrs['orbit_info'][key][att_name] = att_val
+            IS2_atl03_attrs["orbit_info"][key] = {}
+            for att_name, att_val in val.attrs.items():
+                IS2_atl03_attrs["orbit_info"][key][att_name] = att_val
 
     # information ancillary to the data product
     # number of GPS seconds between the GPS epoch (1980-01-06T00:00:00Z UTC)
@@ -172,112 +163,131 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     # Add this value to delta time parameters to compute full gps_seconds
     # could alternatively use the Julian day of the ATLAS SDP epoch: 2458119.5
     # and add leap seconds since 2018-01-01T00:00:00Z UTC (ATLAS SDP epoch)
-    IS2_atl03_mds['ancillary_data'] = {}
-    IS2_atl03_attrs['ancillary_data'] = {}
-    ancillary_keys = ['atlas_sdp_gps_epoch','data_end_utc','data_start_utc',
-        'end_cycle','end_geoseg','end_gpssow','end_gpsweek','end_orbit',
-        'end_region','end_rgt','granule_end_utc','granule_start_utc','release',
-        'start_cycle','start_geoseg','start_gpssow','start_gpsweek',
-        'start_orbit','start_region','start_rgt','version']
+    IS2_atl03_mds["ancillary_data"] = {}
+    IS2_atl03_attrs["ancillary_data"] = {}
+    ancillary_keys = [
+        "atlas_sdp_gps_epoch",
+        "data_end_utc",
+        "data_start_utc",
+        "end_cycle",
+        "end_geoseg",
+        "end_gpssow",
+        "end_gpsweek",
+        "end_orbit",
+        "end_region",
+        "end_rgt",
+        "granule_end_utc",
+        "granule_start_utc",
+        "release",
+        "start_cycle",
+        "start_geoseg",
+        "start_gpssow",
+        "start_gpsweek",
+        "start_orbit",
+        "start_region",
+        "start_rgt",
+        "version",
+    ]
     for key in ancillary_keys:
         # get each HDF5 variable
-        IS2_atl03_mds['ancillary_data'][key] = fileID['ancillary_data'][key][:]
+        IS2_atl03_mds["ancillary_data"][key] = fileID["ancillary_data"][key][:]
         # Getting attributes of group and included variables
         if ATTRIBUTES:
             # Variable Attributes
-            IS2_atl03_attrs['ancillary_data'][key] = {}
-            for att_name,att_val in fileID['ancillary_data'][key].attrs.items():
-                IS2_atl03_attrs['ancillary_data'][key][att_name] = att_val
+            IS2_atl03_attrs["ancillary_data"][key] = {}
+            for att_name, att_val in fileID["ancillary_data"][key].attrs.items():
+                IS2_atl03_attrs["ancillary_data"][key][att_name] = att_val
 
     # transmit-echo-path (tep) parameters
-    IS2_atl03_mds['ancillary_data']['tep'] = {}
-    IS2_atl03_attrs['ancillary_data']['tep'] = {}
-    for key,val in fileID['ancillary_data']['tep'].items():
+    IS2_atl03_mds["ancillary_data"]["tep"] = {}
+    IS2_atl03_attrs["ancillary_data"]["tep"] = {}
+    for key, val in fileID["ancillary_data"]["tep"].items():
         # get each HDF5 variable
-        IS2_atl03_mds['ancillary_data']['tep'][key] = val[:]
+        IS2_atl03_mds["ancillary_data"]["tep"][key] = val[:]
         # Getting attributes of group and included variables
         if ATTRIBUTES:
             # Variable Attributes
-            IS2_atl03_attrs['ancillary_data']['tep'][key] = {}
-            for att_name,att_val in val.attrs.items():
-                IS2_atl03_attrs['ancillary_data']['tep'][key][att_name] = att_val
+            IS2_atl03_attrs["ancillary_data"]["tep"][key] = {}
+            for att_name, att_val in val.attrs.items():
+                IS2_atl03_attrs["ancillary_data"]["tep"][key][att_name] = att_val
 
     # channel dead time and first photon bias derived from ATLAS calibration
-    cal1,cal2 = ('ancillary_data','calibrations')
-    for var in ['dead_time','first_photon_bias']:
+    cal1, cal2 = ("ancillary_data", "calibrations")
+    for var in ["dead_time", "first_photon_bias"]:
         IS2_atl03_mds[cal1][var] = {}
         IS2_atl03_attrs[cal1][var] = {}
-        for key,val in fileID[cal1][cal2][var].items():
+        for key, val in fileID[cal1][cal2][var].items():
             # get each HDF5 variable
             if isinstance(val, h5py.Dataset):
                 IS2_atl03_mds[cal1][var][key] = val[:]
             elif isinstance(val, h5py.Group):
                 IS2_atl03_mds[cal1][var][key] = {}
-                for k,v in val.items():
+                for k, v in val.items():
                     IS2_atl03_mds[cal1][var][key][k] = v[:]
             # Getting attributes of group and included variables
             if ATTRIBUTES:
                 # Variable Attributes
                 IS2_atl03_attrs[cal1][var][key] = {}
-                for att_name,att_val in val.attrs.items():
+                for att_name, att_val in val.attrs.items():
                     IS2_atl03_attrs[cal1][var][key][att_name] = att_val
                 if isinstance(val, h5py.Group):
-                    for k,v in val.items():
+                    for k, v in val.items():
                         IS2_atl03_attrs[cal1][var][key][k] = {}
-                        for att_name,att_val in val.attrs.items():
-                            IS2_atl03_attrs[cal1][var][key][k][att_name]=att_val
+                        for att_name, att_val in val.attrs.items():
+                            IS2_atl03_attrs[cal1][var][key][k][att_name] = att_val
 
     # get ATLAS impulse response variables for the transmitter echo path (TEP)
-    tep1,tep2 = ('atlas_impulse_response','tep_histogram')
+    tep1, tep2 = ("atlas_impulse_response", "tep_histogram")
     IS2_atl03_mds[tep1] = {}
     IS2_atl03_attrs[tep1] = {}
-    for pce in ['pce1_spot1','pce2_spot3']:
-        IS2_atl03_mds[tep1][pce] = {tep2:{}}
-        IS2_atl03_attrs[tep1][pce] = {tep2:{}}
+    for pce in ["pce1_spot1", "pce2_spot3"]:
+        IS2_atl03_mds[tep1][pce] = {tep2: {}}
+        IS2_atl03_attrs[tep1][pce] = {tep2: {}}
         # for each TEP variable
-        for key,val in fileID[tep1][pce][tep2].items():
+        for key, val in fileID[tep1][pce][tep2].items():
             IS2_atl03_mds[tep1][pce][tep2][key] = val[:]
             # Getting attributes of included variables
             if ATTRIBUTES:
                 # Global Group Attributes
-                for att_name,att_val in fileID[tep1][pce][tep2].attrs.items():
+                for att_name, att_val in fileID[tep1][pce][tep2].attrs.items():
                     IS2_atl03_attrs[tep1][pce][tep2][att_name] = att_val
                 # Variable Attributes
                 IS2_atl03_attrs[tep1][pce][tep2][key] = {}
-                for att_name,att_val in val.attrs.items():
+                for att_name, att_val in val.attrs.items():
                     IS2_atl03_attrs[tep1][pce][tep2][key][att_name] = att_val
 
     # Global File Attributes
     if ATTRIBUTES:
-        for att_name,att_val in fileID.attrs.items():
+        for att_name, att_val in fileID.attrs.items():
             IS2_atl03_attrs[att_name] = att_val
 
     # Closing the HDF5 file
     fileID.close()
     # Return the datasets and variables
-    return (IS2_atl03_mds,IS2_atl03_attrs,IS2_atl03_beams)
+    return (IS2_atl03_mds, IS2_atl03_attrs, IS2_atl03_beams)
+
 
 # convert_wgs_to_utm function, see https://stackoverflow.com/a/40140326/4556479
 def convert_wgs_to_utm(lon: float, lat: float):
     """Based on lat and lng, return best utm epsg-code"""
     utm_band = str((math.floor((lon + 180) / 6) % 60) + 1)
     if len(utm_band) == 1:
-        utm_band = '0' + utm_band
+        utm_band = "0" + utm_band
     if lat >= 0:
-        epsg_code = 'epsg:326' + utm_band
+        epsg_code = "epsg:326" + utm_band
         return epsg_code
-    epsg_code = 'epsg:327' + utm_band
+    epsg_code = "epsg:327" + utm_band
     return epsg_code
 
 
 def orthometric_correction(lat, lon, Z, epsg):
     # Define the Proj string
-    #To transform from WGS84 ellipsoidal height
+    # To transform from WGS84 ellipsoidal height
     # to EGM2008 orthometric height using PyProj
     # proj_string = '+proj=latlong +ellps=WGS84 +datum=WGS84 +vunits=m +no_defs +geoidgrids=egm2008-1.gtx'
     # # Define the Proj string for WGS84 ellipsoidal height
     # wgs84_proj_string = '+proj=latlong +ellps=WGS84 +datum=WGS84 +no_defs'
-    
+
     # # Define the Proj string for EGM2008 orthometric height: egm08_25,egm2008-1
     # egm2008_proj_string = \
     #     '+proj=latlong +ellps=WGS84 +datum=WGS84 +no_defs ' \
@@ -333,8 +343,10 @@ def get_atl03_seg_id(atl03_ph_index_beg, atl03_segment_id, atl03_heights_len):
     # Iterate through ph_index_beg, from the first to second to last number
     # and set the photons between ph_index_beg i to ph_index_beg i + 1 to
     # segment id i
-    for i in range(0, len(atl03_ph_index_beg) - 1):
-        ph_segment_id[atl03_ph_index_beg[i]:atl03_ph_index_beg[i + 1]] = atl03_segment_id[i]
+    for i in range(len(atl03_ph_index_beg) - 1):
+        ph_segment_id[atl03_ph_index_beg[i] : atl03_ph_index_beg[i + 1]] = (
+            atl03_segment_id[i]
+        )
 
     # Return list of segment_id at the photon level
     return ph_segment_id
@@ -388,34 +400,51 @@ def ref_linear_interp(x, y):
 def horizontal_vertical_bin_dataset(dataset, lat_res, vertical_res):
     """Bin data along vertical and horizontal scales
     for later segmentation"""
-    
+
     # Filter values within the range (-50, 10), because photons elevation outside this range will be real noise
     valid_range = (-50, 10)
-    valid_mask = (dataset['photon_height'] > valid_range[0]) & (dataset['photon_height'] < valid_range[1])
+    valid_mask = (dataset["photon_height"] > valid_range[0]) & (
+        dataset["photon_height"] < valid_range[1]
+    )
 
     # Apply the valid_mask to filter unwanted values
     filtered_dataset = dataset[valid_mask]
 
     # Calculate the number of height bins
-    height_range = abs(filtered_dataset['photon_height'].max() - filtered_dataset['photon_height'].min())
-    height_bin_number = max(1, round(height_range / vertical_res))  # Ensure at least one bin
+    height_range = abs(
+        filtered_dataset["photon_height"].max()
+        - filtered_dataset["photon_height"].min()
+    )
+    height_bin_number = max(
+        1, round(height_range / vertical_res)
+    )  # Ensure at least one bin
 
     # Calculate the number of latitude bins
-    lat_range = abs(filtered_dataset['lat'].max() - filtered_dataset['lat'].min())
+    lat_range = abs(filtered_dataset["lat"].max() - filtered_dataset["lat"].min())
     lat_bin_number = max(1, round(lat_range / lat_res))  # Ensure at least one bin
 
     # Create bins for latitude
-    lat_bins = pd.cut(filtered_dataset['lat'], bins=lat_bin_number, labels=np.arange(lat_bin_number))
+    lat_bins = pd.cut(
+        filtered_dataset["lat"], bins=lat_bin_number, labels=np.arange(lat_bin_number)
+    )
 
     # Create bins for height
-    height_bins = pd.cut(filtered_dataset['photon_height'], bins=height_bin_number,
-                         labels=np.round(np.linspace(filtered_dataset['photon_height'].min(),
-                                                     filtered_dataset['photon_height'].max(),
-                                                     num=height_bin_number), decimals=1))
+    height_bins = pd.cut(
+        filtered_dataset["photon_height"],
+        bins=height_bin_number,
+        labels=np.round(
+            np.linspace(
+                filtered_dataset["photon_height"].min(),
+                filtered_dataset["photon_height"].max(),
+                num=height_bin_number,
+            ),
+            decimals=1,
+        ),
+    )
 
     # Add bins to dataframe using .loc to avoid SettingWithCopyWarning
-    filtered_dataset.loc[:, 'lat_bins'] = lat_bins
-    filtered_dataset.loc[:, 'height_bins'] = height_bins
+    filtered_dataset.loc[:, "lat_bins"] = lat_bins
+    filtered_dataset.loc[:, "height_bins"] = height_bins
     filtered_dataset = filtered_dataset.reset_index(drop=True)
 
     return filtered_dataset
@@ -423,22 +452,29 @@ def horizontal_vertical_bin_dataset(dataset, lat_res, vertical_res):
 
 # thinking about grid searching to detect bathymetric directly
 # rather than bin and then search
-def horizontal_vertical_grid_density_cal(dataset, lat_res, vertical_res, density_threshold):
+def horizontal_vertical_grid_density_cal(
+    dataset, lat_res, vertical_res, density_threshold
+):
     """Bin data along vertical and horizontal scales
-       and calculate high-density points using a grid method"""
+    and calculate high-density points using a grid method"""
 
     # Calculate the number of bins required both vertically
-    lat_bin_number = round(abs(dataset['lat'].min() - dataset['lat'].max()) / lat_res)
+    lat_bin_number = round(abs(dataset["lat"].min() - dataset["lat"].max()) / lat_res)
     # and horizontally based on resolution size
-    height_bin_number = round(abs(dataset['photon_height'].min() - dataset['photon_height'].max()) / vertical_res)
+    height_bin_number = round(
+        abs(dataset["photon_height"].min() - dataset["photon_height"].max())
+        / vertical_res
+    )
 
     # Create the grid
     grid = np.zeros((lat_bin_number, height_bin_number))
 
     # Iterate over the dataset and assign points to cells
     for _, row in dataset.iterrows():
-        lat_index = int((row['lat'] - dataset['lat'].min()) / lat_res)
-        height_index = int((row['photon_height'] - dataset['photon_height'].min()) / vertical_res)
+        lat_index = int((row["lat"] - dataset["lat"].min()) / lat_res)
+        height_index = int(
+            (row["photon_height"] - dataset["photon_height"].min()) / vertical_res
+        )
         grid[lat_index, height_index] += 1
 
     # Identify high-density cells
@@ -448,10 +484,14 @@ def horizontal_vertical_grid_density_cal(dataset, lat_res, vertical_res, density
     dataset_copy = dataset.copy()
 
     # Assign the cell indices as bins to the dataset
-    dataset_copy['lat_bins'] = pd.cut(dataset['lat'], bins=lat_bin_number,
-                                      labels=np.arange(lat_bin_number))
-    dataset_copy['height_bins'] = pd.cut(dataset['photon_height'], bins=height_bin_number,
-                                         labels=np.arange(height_bin_number))
+    dataset_copy["lat_bins"] = pd.cut(
+        dataset["lat"], bins=lat_bin_number, labels=np.arange(lat_bin_number)
+    )
+    dataset_copy["height_bins"] = pd.cut(
+        dataset["photon_height"],
+        bins=height_bin_number,
+        labels=np.arange(height_bin_number),
+    )
 
     # Reset the index of the copied dataset
     dataset_copy = dataset_copy.reset_index(drop=True)
@@ -465,17 +505,21 @@ def horizontal_bin_dataset(dataset, lat_res):
     for later segmentation"""
 
     # Calculate the number of bins required horizontally based on resolution size
-    lat_bin_number = round(abs(dataset['lat_utm'].min() - dataset['lat_utm'].max()) / lat_res)
+    lat_bin_number = round(
+        abs(dataset["lat_utm"].min() - dataset["lat_utm"].max()) / lat_res
+    )
 
     # Cut lat bins
     # lat_bins = pd.cut(dataset['lat'], bins=lat_bin_number, labels=np.array(range(lat_bin_number)))
-    lat_bins = pd.cut(dataset['lat_utm'], bins=lat_bin_number, labels=np.array(range(lat_bin_number)))
+    lat_bins = pd.cut(
+        dataset["lat_utm"], bins=lat_bin_number, labels=np.array(range(lat_bin_number))
+    )
 
     # Create a copy of the dataset
     dataset_copy = dataset.copy()
 
     # Add lat bins to the dataframe
-    dataset_copy['lat_bins'] = lat_bins
+    dataset_copy["lat_bins"] = lat_bins
 
     # Reset the index of the copied dataset
     dataset_copy = dataset_copy.reset_index(drop=True)
@@ -492,33 +536,34 @@ def get_rm_sea_surface_bin(binned_dataset):
     flag = 1
 
     # group dataset by lat bins
-    grouped_data = binned_dataset.groupby(['lat_bins'], group_keys=True)
+    grouped_data = binned_dataset.groupby(["lat_bins"], group_keys=True)
     data_groups = dict(list(grouped_data))
 
     # Loop through groups and return average sea height
     for k, v in data_groups.items():
-
-        lat_bin_average = v['lat'].mean()
+        lat_bin_average = v["lat"].mean()
 
         # Create new dataframe based on occurrence of photons per height bin
-        new_df = pd.DataFrame(v.groupby('height_bins',observed=False).count())
+        new_df = pd.DataFrame(v.groupby("height_bins", observed=False).count())
 
         # Return the bin with the highest count
-        largest_h_bin = new_df['lat'].argmax()
+        largest_h_bin = new_df["lat"].argmax()
 
         # Select the index of the bin with the highest count
         largest_h_index = new_df.index[largest_h_bin]
 
         # get all values below this bin
         # Use boolean indexing to select only the values below the peak bin
-        new_photon_array_without_peak_bin = v.loc[v['height_bins'] < largest_h_index]
+        new_photon_array_without_peak_bin = v.loc[v["height_bins"] < largest_h_index]
 
         if flag == 1:
             photon_array_without_peak_bin = new_photon_array_without_peak_bin
             flag = 2
 
         else:
-            photon_array_without_peak_bin = photon_array_without_peak_bin.append(new_photon_array_without_peak_bin)
+            photon_array_without_peak_bin = photon_array_without_peak_bin.append(
+                new_photon_array_without_peak_bin
+            )
 
         del new_df
 
@@ -527,36 +572,37 @@ def get_rm_sea_surface_bin(binned_dataset):
 
 def get_sea_surface_height(binned_data, threshold):
     """Calculate mean sea height for easier calculation of depth and cleaner figures"""
-    
-    #set flag for the df save
+
+    # set flag for the df save
     firstTimeIndex = True
-    
+
     # Create sea height list
     sea_surface_height = []
     mean_lat_bins_seq = []
     sea_surface_subsurface_photons_ratio = []
 
-
     # Group dataset by latitude bins
-    grouped_data = binned_data.groupby(['lat_bins'], group_keys=True, observed=False)
+    grouped_data = binned_data.groupby(["lat_bins"], group_keys=True, observed=False)
     data_groups = dict(list(grouped_data))
 
     # Loop through groups and return average sea height
     for k, v in data_groups.items():
         # based on lat_utm
-        lat_bin_average = v['lat'].mean()
+        lat_bin_average = v["lat"].mean()
 
         # Create new dataframe based on occurrence of photons per height bin
-        new_df = pd.DataFrame(v.groupby(['height_bins'], observed=False).count())
+        new_df = pd.DataFrame(v.groupby(["height_bins"], observed=False).count())
 
         # Return the bin with the highest count
-        largest_h_bin = new_df['lat'].argmax()
+        largest_h_bin = new_df["lat"].argmax()
 
         # Select the index of the bin with the highest count
         largest_h_index = new_df.index[largest_h_bin]
 
         # Calculate the median value of all photon height values within this bin
-        photons_sea_surface = v.loc[v['height_bins'] == largest_h_index, 'photon_height']
+        photons_sea_surface = v.loc[
+            v["height_bins"] == largest_h_index, "photon_height"
+        ]
         lat_bin_sea_median = photons_sea_surface.median()
 
         # Append to sea height list
@@ -567,119 +613,131 @@ def get_sea_surface_height(binned_data, threshold):
         # Get all photons below sea surface
         # to determine segment type of each subsurface water column
         # Use calculated sea height to determine photons at 0.5m below peak
-        photons_sea_surface_up = \
-            v.loc[(v['photon_height'] > (lat_bin_sea_median - threshold)) &
-                  (v['photon_height'] < (lat_bin_sea_median + 2*threshold))]
+        photons_sea_surface_up = v.loc[
+            (v["photon_height"] > (lat_bin_sea_median - threshold))
+            & (v["photon_height"] < (lat_bin_sea_median + 2 * threshold))
+        ]
 
         # Calculate the photon ratio between surface and whole photons
-        if v['photon_height'].shape[0] > 0:
-            new_photons_ratio_sea_surface = \
-                photons_sea_surface_up.shape[0] / v['photon_height'].shape[0]
+        if v["photon_height"].shape[0] > 0:
+            new_photons_ratio_sea_surface = (
+                photons_sea_surface_up.shape[0] / v["photon_height"].shape[0]
+            )
         else:
             new_photons_ratio_sea_surface = np.nan
 
-        sea_surface_subsurface_photons_ratio.append((1 - new_photons_ratio_sea_surface))
+        sea_surface_subsurface_photons_ratio.append(1 - new_photons_ratio_sea_surface)
 
     # Filter out sea height bin values outside 2 SD of mean.
     mean = np.nanmean(sea_surface_height, axis=0)
     sd = np.nanstd(sea_surface_height, axis=0)
 
-    final_sea_surface_height = np.where((sea_surface_height > (mean + 2 * sd)) | 
-                                        (sea_surface_height < (mean - 2 * sd)),
-                                        np.nan,
-                                        sea_surface_height).tolist()
-    
-    sea_surface_height_abnormal_label = np.where(np.isnan(final_sea_surface_height), 0, 1)
+    final_sea_surface_height = np.where(
+        (sea_surface_height > (mean + 2 * sd)) | (sea_surface_height < (mean - 2 * sd)),
+        np.nan,
+        sea_surface_height,
+    ).tolist()
+
+    sea_surface_height_abnormal_label = np.where(
+        np.isnan(final_sea_surface_height), 0, 1
+    )
 
     # Determine label based on ratio of sea surface photons and subsurface photons
-    sea_surface_dominated_label = \
-        np.where(np.array(sea_surface_subsurface_photons_ratio) >= 0.2, 0, 1)
-        
+    sea_surface_dominated_label = np.where(
+        np.array(sea_surface_subsurface_photons_ratio) >= 0.2, 0, 1
+    )
+
     # Loop through groups again and return photons below 0.5m of sea height
     PhotonDFBelowThresholdPeak = pd.DataFrame()
     for i, (k, v) in enumerate(data_groups.items()):
         # Get all values below this bin
-        NewPhotonDFBelowThresholdPeak = \
-            v.loc[v['photon_height'] < (final_sea_surface_height[i] - threshold)]
-        
+        NewPhotonDFBelowThresholdPeak = v.loc[
+            v["photon_height"] < (final_sea_surface_height[i] - threshold)
+        ]
+
         if firstTimeIndex:
             PhotonDFBelowThresholdPeak = NewPhotonDFBelowThresholdPeak
-            firstTimeIndex=False
-        else: 
-           PhotonDFBelowThresholdPeak=\
-               pd.concat([PhotonDFBelowThresholdPeak, NewPhotonDFBelowThresholdPeak])
-    
-    
-    return final_sea_surface_height, \
-        sea_surface_height_abnormal_label, \
-        sea_surface_dominated_label,\
-        PhotonDFBelowThresholdPeak
+            firstTimeIndex = False
+        else:
+            PhotonDFBelowThresholdPeak = pd.concat(
+                [PhotonDFBelowThresholdPeak, NewPhotonDFBelowThresholdPeak]
+            )
+
+    return (
+        final_sea_surface_height,
+        sea_surface_height_abnormal_label,
+        sea_surface_dominated_label,
+        PhotonDFBelowThresholdPeak,
+    )
 
 
 #
-#Arbitrary cutoff below the max value - 0.5 m below peak 
+# Arbitrary cutoff below the max value - 0.5 m below peak
 # (we may also use 1 m but we can add that later) (apply to raw photon data, each of 6 beams)
-def get_photon_below_sea_surface(binned_data,threshold):
-    '''Calculate mean sea height for easier calculation of depth and cleaner figures'''
-    
-    #set flag for the df save
-    firstTimeIndex=1
-    
+def get_photon_below_sea_surface(binned_data, threshold):
+    """Calculate mean sea height for easier calculation of depth and cleaner figures"""
+
+    # set flag for the df save
+    firstTimeIndex = 1
+
     # Create sea height list
     sea_surface_height = []
-#     mean_lat_bins_seq=[]
-   
-    grouped_data = binned_data.groupby(['lat_bins'], group_keys=True, observed=False)
+    #     mean_lat_bins_seq=[]
+
+    grouped_data = binned_data.groupby(["lat_bins"], group_keys=True, observed=False)
     data_groups = dict(list(grouped_data))
-    
+
     # Loop through groups and return average sea height
-    for k,v in data_groups.items():
-        
-        lat_bin_average=v['lat_utm'].mean()
-        
+    for k, v in data_groups.items():
+        lat_bin_average = v["lat_utm"].mean()
+
         # Create new dataframe based on occurance of photons per height bin
-        new_df = pd.DataFrame(v.groupby(['height_bins'], observed=False).count())
-        
+        new_df = pd.DataFrame(v.groupby(["height_bins"], observed=False).count())
+
         # Return the bin with the highest count
-        largest_h_bin = new_df['lat_utm'].argmax()
-        
+        largest_h_bin = new_df["lat_utm"].argmax()
+
         # Select the index of the bin with the highest count
         largest_h = new_df.index[largest_h_bin]
-        
+
         # Calculate the median value of all values within this bin
-        lat_bin_sea_median = v.loc[v['height_bins']==largest_h, 'photon_height'].median()
-        
+        lat_bin_sea_median = v.loc[
+            v["height_bins"] == largest_h, "photon_height"
+        ].median()
+
         # Append to sea height list
         sea_surface_height.append(lat_bin_sea_median)
-#         mean_lat_bins_seq.append(lat_bin_average)
+        #         mean_lat_bins_seq.append(lat_bin_average)
         del new_df
-        
+
     # Filter out sea height bin values outside 2 SD of mean.
     mean = np.nanmean(sea_surface_height, axis=0)
     sd = np.nanstd(sea_surface_height, axis=0)
-    Final_sea_height = np.where((sea_surface_height > (mean + 2*sd)) | (sea_surface_height < (mean - 2*sd)), np.nan, 
-                              sea_surface_height).tolist()
-    Abnormal_sea_height_label=np.where(np.isnan(Final_sea_height), 1, 0)
-    
+    Final_sea_height = np.where(
+        (sea_surface_height > (mean + 2 * sd)) | (sea_surface_height < (mean - 2 * sd)),
+        np.nan,
+        sea_surface_height,
+    ).tolist()
+    Abnormal_sea_height_label = np.where(np.isnan(Final_sea_height), 1, 0)
 
     # Loop through groups again and return photons below 0.5m of sea height
-    for k,v in data_groups.items():
-                
+    for k, v in data_groups.items():
         # get all values below this bin
         # Use calculated sea height to determine photons at 0.5m below peak
-        NewPhotonArrayBelowThresholdPeak= \
-        v.loc[v['photon_height']<(sea_surface_height[k]-threshold)]
-        
-        if firstTimeIndex ==1:
-            PhotonArrayBelowThresholdPeak=NewPhotonArrayBelowThresholdPeak
-            firstTimeIndex=2
-            
-        else: 
-            PhotonArrayBelowThresholdPeak=PhotonArrayBelowThresholdPeak.append(NewPhotonArrayBelowThresholdPeak)
-        
+        NewPhotonArrayBelowThresholdPeak = v.loc[
+            v["photon_height"] < (sea_surface_height[k] - threshold)
+        ]
+
+        if firstTimeIndex == 1:
+            PhotonArrayBelowThresholdPeak = NewPhotonArrayBelowThresholdPeak
+            firstTimeIndex = 2
+
+        else:
+            PhotonArrayBelowThresholdPeak = PhotonArrayBelowThresholdPeak.append(
+                NewPhotonArrayBelowThresholdPeak
+            )
 
     return PhotonArrayBelowThresholdPeak
-
 
 
 # Function to get elevation for multiple points
@@ -689,11 +747,14 @@ def get_seafloor_bathy_GEBCO_batch(lons, lats, raster, raster_data):
     rows, cols = np.array(rows), np.array(cols)
 
     # Ensure the indices are within bounds
-    valid_mask = (rows >= 0) & (rows < raster.height) & (cols >= 0) & (cols < raster.width)
+    valid_mask = (
+        (rows >= 0) & (rows < raster.height) & (cols >= 0) & (cols < raster.width)
+    )
     elevations = np.full(lons.shape, np.nan)
     elevations[valid_mask] = raster_data[rows[valid_mask], cols[valid_mask]]
 
     return elevations
+
 
 def get_water_temp(date_year, date_month, date_day, latitude, longitude):
     """
@@ -712,7 +773,7 @@ def get_water_temp(date_year, date_month, date_day, latitude, longitude):
     month = date_month
     # date[6:8]
     day = date_day
-    day_of_year = str(datetime.strptime(date, '%Y%m%d').timetuple().tm_yday)
+    day_of_year = str(datetime.strptime(date, "%Y%m%d").timetuple().tm_yday)
     # Add zero in front of day of year string
     zero_day_of_year = day_of_year.zfill(3)
 
@@ -723,8 +784,11 @@ def get_water_temp(date_year, date_month, date_day, latitude, longitude):
     new_lat_min = 0
     new_lat_max = 17998
 
-    new_lat = round(((old_lat - old_lat_min) / (old_lat_max - old_lat_min)) *
-                    (new_lat_max - new_lat_min) + new_lat_min)
+    new_lat = round(
+        ((old_lat - old_lat_min) / (old_lat_max - old_lat_min))
+        * (new_lat_max - new_lat_min)
+        + new_lat_min
+    )
 
     # Calculate ratio of longitude from mid-point of IS2 track
     old_lon = longitude.mean()
@@ -733,24 +797,41 @@ def get_water_temp(date_year, date_month, date_day, latitude, longitude):
     new_lon_min = 0
     new_lon_max = 35999
 
-    new_lon = round(((old_lon - old_lon_min) / (old_lon_max - old_lon_min)) *
-                    (new_lon_max - new_lon_min) + new_lon_min)
+    new_lon = round(
+        ((old_lon - old_lon_min) / (old_lon_max - old_lon_min))
+        * (new_lon_max - new_lon_min)
+        + new_lon_min
+    )
 
     # Access the SST data using the JPL OpenDap interface
-    url = 'https://opendap.jpl.nasa.gov/opendap/OceanTemperature/ghrsst/data/GDS2/L4/GLOB/JPL/MUR/v4.1/' \
-          + str(year) + '/' + str(zero_day_of_year) + '/' + str(date) \
-          + '090000-JPL-L4_GHRSST-SSTfnd-MUR-GLOB-v02.0-fv04.1.nc'
+    url = (
+        "https://opendap.jpl.nasa.gov/opendap/OceanTemperature/ghrsst/data/GDS2/L4/GLOB/JPL/MUR/v4.1/"
+        + str(year)
+        + "/"
+        + str(zero_day_of_year)
+        + "/"
+        + str(date)
+        + "090000-JPL-L4_GHRSST-SSTfnd-MUR-GLOB-v02.0-fv04.1.nc"
+    )
 
     dataset = netCDF4.Dataset(url)
 
     # Access the data and convert the temperature from K to C
-    water_temp = dataset['analysed_sst'][0, new_lat, new_lon] - 273.15
+    water_temp = dataset["analysed_sst"][0, new_lat, new_lon] - 273.15
     return water_temp
 
 
-def refraction_correction(WTemp, WSmodel, Wavelength,
-                          Photon_ref_elev, Ph_ref_azimuth,
-                          PhotonZ, PhotonX, PhotonY, Ph_Conf):
+def refraction_correction(
+    WTemp,
+    WSmodel,
+    Wavelength,
+    Photon_ref_elev,
+    Ph_ref_azimuth,
+    PhotonZ,
+    PhotonX,
+    PhotonY,
+    Ph_Conf,
+):
     """
     WTemp; there is python library that pulls water temp data
     WSmodel is the value surface height
@@ -780,18 +861,18 @@ def refraction_correction(WTemp, WSmodel, Wavelength,
     n1 = 1.00029
 
     # refractive index of water
-    n2 = (a * WaterTemp ** 2) + (b * wl ** 2) + (c * WaterTemp) + (d * wl) + e
+    n2 = (a * WaterTemp**2) + (b * wl**2) + (c * WaterTemp) + (d * wl) + e
 
     # assumption is 0.25416
     # This example is refractionCoef = 0.25449
     # 1.00029 is refraction of air constant
-    correction_coef = (1 - (n1 / n2))
+    correction_coef = 1 - (n1 / n2)
 
     # read photon ref_elev to get theta1
     theta1 = np.pi / 2 - Photon_ref_elev
 
     # eq 1. Theta2
-    theta2 = np.arcsin(((n1 * np.sin(theta1)) / n2))
+    theta2 = np.arcsin((n1 * np.sin(theta1)) / n2)
 
     # eq 3. S
     # Approximate water Surface = 1.5
@@ -810,7 +891,7 @@ def refraction_correction(WTemp, WSmodel, Wavelength,
     phi = theta1 - theta2
 
     # P is the difference between raw and corrected YZ location
-    P = np.sqrt(R ** 2 + S ** 2 - 2 * R * S * np.cos(phi))
+    P = np.sqrt(R**2 + S**2 - 2 * R * S * np.cos(phi))
 
     # alpha is an angle needed
     alpha = np.arcsin((R * np.sin(phi)) / P)
@@ -834,25 +915,36 @@ def refraction_correction(WTemp, WSmodel, Wavelength,
     outY = PhotonY + DN
     outZ = PhotonZ + DZ
 
-    '''
+    """
         print('For selected Bathy photon:')
         print('lat = ', PhotonY[9000])
         print('long = ', PhotonX[9000])
         print('Raw Depth = ', PhotonZ[9000])
         print('D = ', D[9000])
-        
+
         print('ref_elev = ', Photon_ref_elev[9000])
-        
+
         print('Delta East = ', DE[9000])
         print('Delta North = ', DN[9000])
         print('Delta Z = ', DZ[9000])
-        '''
-    return (outX, outY, outZ, Ph_Conf, PhotonX, PhotonY, PhotonZ, Ph_ref_azimuth,
-            Photon_ref_elev)  # We are most interested in out-x, out-y, out-z
+        """
+    return (
+        outX,
+        outY,
+        outZ,
+        Ph_Conf,
+        PhotonX,
+        PhotonY,
+        PhotonZ,
+        Ph_ref_azimuth,
+        Photon_ref_elev,
+    )  # We are most interested in out-x, out-y, out-z
 
 
-def get_bath_height_percentile_thresh(binned_data, percentile_thresh, sea_surface_height, vertical_res):
-    """ Detect bathymetric level per bin based on percentile_thresh """
+def get_bath_height_percentile_thresh(
+    binned_data, percentile_thresh, sea_surface_height, vertical_res
+):
+    """Detect bathymetric level per bin based on percentile_thresh"""
     # Create sea height list
     bath_height = []
 
@@ -862,34 +954,42 @@ def get_bath_height_percentile_thresh(binned_data, percentile_thresh, sea_surfac
 
     # Group data by latitude
     # Filter out surface data that are two bins below median surface value calculated above
-    binned_data_bath = binned_data[(binned_data['photon_height'] <
-                                    sea_surface_height - (vertical_res * 2))]
-    grouped_data = binned_data_bath.groupby(['lat_bins'], group_keys=True)
+    binned_data_bath = binned_data[
+        (binned_data["photon_height"] < sea_surface_height - (vertical_res * 2))
+    ]
+    grouped_data = binned_data_bath.groupby(["lat_bins"], group_keys=True)
     data_groups = dict(list(grouped_data))
 
     # Create a percentile threshold of photon counts in each grid,
     # grouped by both x and y axes.
     count_threshold = np.percentile(
-        binned_data.groupby(['lat_bins', 'height_bins']).size().reset_index().groupby('lat_bins')[[0]].max(),
-        percentile_thresh)
+        binned_data.groupby(["lat_bins", "height_bins"])
+        .size()
+        .reset_index()
+        .groupby("lat_bins")[[0]]
+        .max(),
+        percentile_thresh,
+    )
 
     # Loop through groups and return average bathy height
     for k, v in data_groups.items():
-        new_df = pd.DataFrame(v.groupby('height_bins').count())
-        bath_bin = new_df['lat'].argmax()
+        new_df = pd.DataFrame(v.groupby("height_bins").count())
+        bath_bin = new_df["lat"].argmax()
         bath_bin_h = new_df.index[bath_bin]
 
         # Set threshold of photon counts per bin
         # here this script determines whether there is bathymetry signals by
         # the photon counts per bin below sea surface height
-        if new_df.iloc[bath_bin]['lat'] >= count_threshold:
+        if new_df.iloc[bath_bin]["lat"] >= count_threshold:
+            geo_photon_height.append(
+                v.loc[v["height_bins"] == bath_bin_h, "cor_photon_height"].values
+            )
+            geo_longitude.append(v.loc[v["height_bins"] == bath_bin_h, "lon"].values)
+            geo_latitude.append(v.loc[v["height_bins"] == bath_bin_h, "lat"].values)
 
-            geo_photon_height.append(v.loc[v['height_bins'] ==
-                                           bath_bin_h, 'cor_photon_height'].values)
-            geo_longitude.append(v.loc[v['height_bins'] == bath_bin_h, 'lon'].values)
-            geo_latitude.append(v.loc[v['height_bins'] == bath_bin_h, 'lat'].values)
-
-            bath_bin_median = v.loc[v['height_bins'] == bath_bin_h, 'cor_photon_height'].median()
+            bath_bin_median = v.loc[
+                v["height_bins"] == bath_bin_h, "cor_photon_height"
+            ].median()
             bath_height.append(bath_bin_median)
             del new_df
 
@@ -902,17 +1002,23 @@ def get_bath_height_percentile_thresh(binned_data, percentile_thresh, sea_surfac
     geo_photon_list = np.concatenate(geo_photon_height).ravel().tolist()
     geo_depth = sea_surface_height - geo_photon_list
     geo_df = pd.DataFrame(
-        {'lon': geo_longitude_list, 'lat': geo_latitude_list,
-         'photon_height': geo_photon_list,
-         'depth': geo_depth})
+        {
+            "lon": geo_longitude_list,
+            "lat": geo_latitude_list,
+            "photon_height": geo_photon_list,
+            "depth": geo_depth,
+        }
+    )
 
     del geo_longitude_list, geo_latitude_list, geo_photon_list
 
     return bath_height, geo_df
 
 
-def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_height, vertical_res):
-    """ Calculate bathymetric level per lat bin based on horizontal resolution """
+def get_bath_height_HDBSCAN(
+    lat_binned_data, percentile_thresh, sea_surface_height, vertical_res
+):
+    """Calculate bathymetric level per lat bin based on horizontal resolution"""
     # Create sea height list
     bath_height = []
     geo_photon_height = []
@@ -922,15 +1028,15 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
     # Group data by latitude
     # Filter out surface data that are two bins (2 times height resolution)
     # below median sea surface value calculated above
-    binned_data_bath = lat_binned_data[(lat_binned_data['photon_height'] <
-                                    sea_surface_height - (vertical_res * 2))]
+    binned_data_bath = lat_binned_data[
+        (lat_binned_data["photon_height"] < sea_surface_height - (vertical_res * 2))
+    ]
 
-    grouped_data = binned_data_bath.groupby(['lat_bins'], group_keys=True)
+    grouped_data = binned_data_bath.groupby(["lat_bins"], group_keys=True)
     data_groups = dict(list(grouped_data))
 
     # Loop through groups and return average bathymetric height
     for k, v in data_groups.items():
-
         # assign each group of dataset to a new dataframe
         new_df = pd.DataFrame(v)
 
@@ -944,7 +1050,9 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
             del new_df
             continue
 
-        lat_height_pairs = list(zip(new_df['lat_utm'], new_df['cor_photon_height']))
+        lat_height_pairs = list(
+            zip(new_df["lat_utm"], new_df["cor_photon_height"], strict=False)
+        )
 
         # Convert to a numpy array for sklearn
         lat_height_pairs_array = np.array(lat_height_pairs)
@@ -968,9 +1076,13 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
                 continue
 
         # cluster = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, leaf_size=20)
-        cluster = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size,
-                                  min_samples=3, cluster_selection_epsilon=20,
-                                  leaf_size=25, core_dist_n_jobs=-1)
+        cluster = hdbscan.HDBSCAN(
+            min_cluster_size=min_cluster_size,
+            min_samples=3,
+            cluster_selection_epsilon=20,
+            leaf_size=25,
+            core_dist_n_jobs=-1,
+        )
         cluster.fit(data_scaled)
 
         # Get the labels assigned to each point by the HDBSCAN model
@@ -980,7 +1092,7 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
         unique, counts = np.unique(labels, return_counts=True)
 
         # Create a dictionary that maps each cluster label to the count of points assigned to it
-        clusters_dict = dict(zip(unique, counts))
+        clusters_dict = dict(zip(unique, counts, strict=False))
 
         # Print the dictionary to see the size of each cluster
         print(clusters_dict)
@@ -994,20 +1106,20 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
         else:
             # Add labels to the DataFrame
             new_df_copy = new_df.copy()
-            new_df_copy['cluster'] = labels
+            new_df_copy["cluster"] = labels
 
             # Subset the DataFrame to get only the data points in the largest cluster
-            bath_cluster_data = new_df[new_df_copy['cluster'] == max_cluster_label]
+            bath_cluster_data = new_df[new_df_copy["cluster"] == max_cluster_label]
 
             # calculate the median height value as the average bathymetric height
-            bath_bin_median = bath_cluster_data['cor_photon_height'].median()
+            bath_bin_median = bath_cluster_data["cor_photon_height"].median()
             bath_height.append(bath_bin_median)
 
             # Extract the longitude, latitude, and photon height for each lat bin
             # and add it to respective lists
-            geo_photon_height.append(bath_cluster_data['cor_photon_height'].values)
-            geo_longitude.append(bath_cluster_data['lon_utm'].values)
-            geo_latitude.append(bath_cluster_data['lat_utm'].values)
+            geo_photon_height.append(bath_cluster_data["cor_photon_height"].values)
+            geo_longitude.append(bath_cluster_data["lon_utm"].values)
+            geo_latitude.append(bath_cluster_data["lat_utm"].values)
 
         del new_df
 
@@ -1021,11 +1133,16 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
 
     # Create a DataFrame
     geo_df = pd.DataFrame(
-        {'lon': geo_longitude_list, 'lat': geo_latitude_list,
-         'photon_height': geo_photon_list,
-         'depth': geo_depth.tolist()})
+        {
+            "lon": geo_longitude_list,
+            "lat": geo_latitude_list,
+            "photon_height": geo_photon_list,
+            "depth": geo_depth.tolist(),
+        }
+    )
 
     return bath_height, geo_df
+
 
 # requires that the input gdf has ranged index values i
 # will need to change if index is changed to time or something
@@ -1035,16 +1152,15 @@ def get_bath_height_HDBSCAN(lat_binned_data, percentile_thresh, sea_surface_heig
 def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
     # try loading the shoreline data
     try:
-        ICESat2_GDF.insert(0, 'lat', ICESat2_GDF.geometry.y, False)
-        ICESat2_GDF.insert(0, 'lon', ICESat2_GDF.geometry.x, False)
+        ICESat2_GDF.insert(0, "lat", ICESat2_GDF.geometry.y, False)
+        ICESat2_GDF.insert(0, "lon", ICESat2_GDF.geometry.x, False)
 
         # allocation of to be used arrays
         zero_int_array = np.int64(np.zeros_like(ICESat2_GDF.geometry.x))
 
         # Land flag initialized as -1
         # If shorelines downloaded already, will be set to 0 or 1
-        ICESat2_GDF.insert(0, 'is_land',
-                           zero_int_array - 1, False)
+        ICESat2_GDF.insert(0, "is_land", zero_int_array - 1, False)
 
         # set the projection
         ICESat2_GDF.set_crs("EPSG:4326", inplace=True)
@@ -1055,13 +1171,15 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         # engine str, 'fiona' or 'pyogrio'
         # somtime it gives error if using fiona
         # land_polygon_gdf = gpd.read_file(shoreline_data_path, bbox=ICESat2_GDF, engine='fiona')
-        land_polygon_gdf = gpd.read_file(shoreline_data_path, bbox=ICESat2_GDF, engine='pyogrio')
+        land_polygon_gdf = gpd.read_file(
+            shoreline_data_path, bbox=ICESat2_GDF, engine="pyogrio"
+        )
 
         # continue with getting a new array of 0-or-1 labels for each photon
         land_point_labels = np.zeros_like(ICESat2_GDF.is_land.values)
 
         # update labels for points in the land polygons
-        pts_in_land = gpd.sjoin(ICESat2_GDF, land_polygon_gdf, predicate='within')
+        pts_in_land = gpd.sjoin(ICESat2_GDF, land_polygon_gdf, predicate="within")
 
         # get land or not bool value
         land_loc = ICESat2_GDF.index.isin(pts_in_land.index)
@@ -1073,7 +1191,6 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         return land_point_labels
 
     except Exception as e:
-
         print(e)
 
         print("Error loading shoreline data, returning -1s for is_land flag")
@@ -1084,29 +1201,44 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         return -np.ones_like(ICESat2_GDF.is_land.values)
 
 
-#
-def produce_figures(binned_data, bath_height, sea_height, solo_sea_surface_label,
-                    y_limit_top, y_limit_bottom, percentile, file, geo_df,
-                    ref_y, ref_z, beam, epsg_num):
+def produce_figures(
+    binned_data,
+    bath_height,
+    sea_height,
+    solo_sea_surface_label,
+    y_limit_top,
+    y_limit_bottom,
+    percentile,
+    file,
+    geo_df,
+    ref_y,
+    ref_z,
+    beam,
+    epsg_num,
+):
     """Create figures"""
 
     # Create bins for latitude
-    bath_x_axis_bins = np.linspace(binned_data.lat.min(),
-                              binned_data.lat.max(), len(bath_height))+20
+    bath_x_axis_bins = (
+        np.linspace(binned_data.lat.min(), binned_data.lat.max(), len(bath_height)) + 20
+    )
 
-    sea_surface_x_axis_bins = np.linspace(binned_data.lat.min(),
-                              binned_data.lat.max(), len(sea_height))+10
+    sea_surface_x_axis_bins = (
+        np.linspace(binned_data.lat.min(), binned_data.lat.max(), len(sea_height)) + 10
+    )
 
     # Create new dataframes for median values
-    bath_median_df = pd.DataFrame({'x': bath_x_axis_bins, 'y': bath_height})
+    bath_median_df = pd.DataFrame({"x": bath_x_axis_bins, "y": bath_height})
 
     # Create uniform sea surface based on median sea surface values and filter out surface breaching
     sea_height1 = [np.nanmedian(sea_height) if i == i else np.nan for i in sea_height]
-    sea_median_df = pd.DataFrame({'x': sea_surface_x_axis_bins, 'y': sea_height1})
+    sea_median_df = pd.DataFrame({"x": sea_surface_x_axis_bins, "y": sea_height1})
 
     # Create uniform solo sea surface label
     sea_surface_label = solo_sea_surface_label
-    sea_surface_label_df = pd.DataFrame({'x': sea_surface_x_axis_bins, 'y': sea_surface_label})
+    sea_surface_label_df = pd.DataFrame(
+        {"x": sea_surface_x_axis_bins, "y": sea_surface_label}
+    )
     idx_1 = np.where(sea_surface_label_df.y == 1)
     idx_0 = np.where(sea_surface_label_df.y == 0)
 
@@ -1117,62 +1249,107 @@ def produce_figures(binned_data, bath_height, sea_height, solo_sea_surface_label
     #     plt.scatter(x=binned_data.lat,
     #     y = binned_data.photon_height, marker='o', lw=0, s=1, alpha = 0.8,
     #     c = 'yellow', label = 'Raw photon height')
-    plt.scatter(ref_y, ref_z, s=0.5, alpha=0.1, c='black')
-    plt.scatter(geo_df.lat, geo_df.photon_height, s=0.8, marker = 'o',
-                alpha=0.1, c='red', label='Classified Photons')
+    plt.scatter(ref_y, ref_z, s=0.5, alpha=0.1, c="black")
+    plt.scatter(
+        geo_df.lat,
+        geo_df.photon_height,
+        s=0.8,
+        marker="o",
+        alpha=0.1,
+        c="red",
+        label="Classified Photons",
+    )
 
     # plt.scatter(x=geo_df.lat,
     # y = geo_df.photon_height, marker='o', lw=0, s=0.8,
     # alpha = 0.8, c = 'black', label = 'Corrected photon bin')
 
     # Plot median values
-    plt.scatter(bath_median_df.x, bath_median_df.y,
-                marker='o', c='r', alpha=0.8, s=2, label='Median bathymetry')
+    plt.scatter(
+        bath_median_df.x,
+        bath_median_df.y,
+        marker="o",
+        c="r",
+        alpha=0.8,
+        s=2,
+        label="Median bathymetry",
+    )
 
-    plt.scatter(sea_median_df.x, sea_median_df.y,
-                marker='o', c='b', alpha=1, s=2, label='Median sea surface')
+    plt.scatter(
+        sea_median_df.x,
+        sea_median_df.y,
+        marker="o",
+        c="b",
+        alpha=1,
+        s=2,
+        label="Median sea surface",
+    )
 
-    plt.scatter(sea_surface_label_df.iloc[idx_1].x, sea_surface_label_df.iloc[idx_1].y,
-                marker='o', c='pink', alpha=1, s=3, label='solo_sea_surface')
-    plt.scatter(sea_surface_label_df.iloc[idx_0].x, sea_surface_label_df.iloc[idx_0].y,
-                marker='o', c='g', alpha=1, s=3, label='non_solo_sea_surface')
+    plt.scatter(
+        sea_surface_label_df.iloc[idx_1].x,
+        sea_surface_label_df.iloc[idx_1].y,
+        marker="o",
+        c="pink",
+        alpha=1,
+        s=3,
+        label="solo_sea_surface",
+    )
+    plt.scatter(
+        sea_surface_label_df.iloc[idx_0].x,
+        sea_surface_label_df.iloc[idx_0].y,
+        marker="o",
+        c="g",
+        alpha=1,
+        s=3,
+        label="non_solo_sea_surface",
+    )
 
     # Insert titles and subtitles
-    plt.title('Icesat2 Bathymetry\n' + file)
-    plt.xlabel('Latitude', fontsize=25)
-    plt.ylabel('Photon Height (m)', fontsize=25)
+    plt.title("Icesat2 Bathymetry\n" + file)
+    plt.xlabel("Latitude", fontsize=25)
+    plt.ylabel("Photon Height (m)", fontsize=25)
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
 
-    plt.legend(loc="upper left", prop={'size': 20})
+    plt.legend(loc="upper left", prop={"size": 20})
 
     # Limit the x and y axes using parameters
     plt.xlim(left=binned_data.lat.min(), right=binned_data.lat.max())
     plt.ylim(top=y_limit_top, bottom=y_limit_bottom)
 
     timestr = time.strftime("%Y%m%d_%H%M%S")
-    file = file.replace('.h5', '')
+    file = file.replace(".h5", "")
     # Define where to save file
     plt.tight_layout()
-    plt.savefig("C:/Workstation/ICESat2_HLS/" + file + '_gt' +
-                str(beam) + '_' + str(percentile) +
-                '_EPSG' + str(epsg_num) + '_' + timestr + ".pdf")
+    plt.savefig(
+        "C:/Workstation/ICESat2_HLS/"
+        + file
+        + "_gt"
+        + str(beam)
+        + "_"
+        + str(percentile)
+        + "_EPSG"
+        + str(epsg_num)
+        + "_"
+        + timestr
+        + ".pdf"
+    )
     # plt.show()
     # plt.close()
 
     # convert corrected locations back to wgs84 (useful to contain)
-    transformer = Transformer.from_crs("EPSG:" + str(epsg_num),
-                                       "EPSG:4326", always_xy=True)
+    transformer = Transformer.from_crs(
+        "EPSG:" + str(epsg_num), "EPSG:4326", always_xy=True
+    )
     print(transformer)
-    lon_wgs84, lat_wgs84 = transformer.transform(
-        geo_df.lon.values, geo_df.lat.values)
+    lon_wgs84, lat_wgs84 = transformer.transform(geo_df.lon.values, geo_df.lat.values)
 
-    geo_df['lon_wgs84'] = lon_wgs84
-    geo_df['lat_wgs84'] = lat_wgs84
+    geo_df["lon_wgs84"] = lon_wgs84
+    geo_df["lat_wgs84"] = lat_wgs84
 
-    geodf = gpd.GeoDataFrame(geo_df,
-                             geometry=gpd.points_from_xy(geo_df.lon_wgs84,
-                                                         geo_df.lat_wgs84))
+    geodf = gpd.GeoDataFrame(
+        geo_df, geometry=gpd.points_from_xy(geo_df.lon_wgs84, geo_df.lat_wgs84)
+    )
 
     geodf.set_crs(epsg=4326, inplace=True)
 

@@ -195,4 +195,3 @@ Eidam, E.F., K. Bisson, C. Wang, C. Walker, and A. Gibbons (2024). ICESat-2 and 
 
 ### License
 This project is licensed under the GNU GPLv3 license.
-

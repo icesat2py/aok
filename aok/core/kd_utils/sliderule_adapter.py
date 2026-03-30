@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -11,22 +10,22 @@ logger = logging.getLogger(__name__)
 
 
 def _get_beam_id_from_track_pair(df: pd.DataFrame) -> pd.Series:
-    if 'gt' in df.columns:
-        return df['gt'].astype(str)
-    if 'track' in df.columns and 'pair' in df.columns:
-        suffix = df['pair'].map({0: 'l', 1: 'r'}).fillna('x')
-        return 'gt' + df['track'].astype(int).astype(str) + suffix
-    return pd.Series(['unknown'] * len(df), index=df.index, dtype='object')
+    if "gt" in df.columns:
+        return df["gt"].astype(str)
+    if "track" in df.columns and "pair" in df.columns:
+        suffix = df["pair"].map({0: "l", 1: "r"}).fillna("x")
+        return "gt" + df["track"].astype(int).astype(str) + suffix
+    return pd.Series(["unknown"] * len(df), index=df.index, dtype="object")
 
 
-def _infer_strong_beam_suffix(df: pd.DataFrame) -> Optional[str]:
-    if 'sc_orient' not in df.columns or df.empty:
+def _infer_strong_beam_suffix(df: pd.DataFrame) -> str | None:
+    if "sc_orient" not in df.columns or df.empty:
         return None
-    orient = df['sc_orient'].dropna()
+    orient = df["sc_orient"].dropna()
     if orient.empty:
         return None
     # Same logic as your Florida script.
-    return 'l' if int(orient.iloc[0]) == 0 else 'r'
+    return "l" if int(orient.iloc[0]) == 0 else "r"
 
 
 def _normalize_signal_conf(values: pd.Series) -> pd.Series:
@@ -39,23 +38,24 @@ def _normalize_signal_conf(values: pd.Series) -> pd.Series:
             return float(v)
         except Exception:
             return np.nan
+
     return values.apply(to_scalar)
 
 
 def _relative_distance_km_per_beam(df: pd.DataFrame) -> pd.Series:
     out = pd.Series(np.nan, index=df.index, dtype=float)
-    for beam_id, beam_df in df.groupby('beam_id'):
-        beam_df = beam_df.sort_values('delta_time')
-        if 'segment_dist' in beam_df.columns:
-            rel_km = (beam_df['segment_dist'] - beam_df['segment_dist'].min()) / 1000.0
+    for beam_id, beam_df in df.groupby("beam_id"):
+        beam_df = beam_df.sort_values("delta_time")
+        if "segment_dist" in beam_df.columns:
+            rel_km = (beam_df["segment_dist"] - beam_df["segment_dist"].min()) / 1000.0
             out.loc[beam_df.index] = rel_km.values
             continue
 
-        lons = beam_df['longitude'].to_numpy(dtype=float)
-        lats = beam_df['latitude'].to_numpy(dtype=float)
+        lons = beam_df["longitude"].to_numpy(dtype=float)
+        lats = beam_df["latitude"].to_numpy(dtype=float)
         if len(lons) == 0:
             continue
-        geod = Geod(ellps='WGS84')
+        geod = Geod(ellps="WGS84")
         cumulative_m = np.zeros(len(lons), dtype=float)
         for i in range(1, len(lons)):
             _, _, dist_m = geod.inv(lons[i - 1], lats[i - 1], lons[i], lats[i])
@@ -66,18 +66,21 @@ def _relative_distance_km_per_beam(df: pd.DataFrame) -> pd.Series:
 
 def _project_to_utm(df: pd.DataFrame) -> pd.DataFrame:
     projected = df.copy()
-    projected['lon'] = np.nan
-    projected['lat'] = np.nan
-    for beam_id, beam_df in projected.groupby('beam_id'):
+    projected["lon"] = np.nan
+    projected["lat"] = np.nan
+    for beam_id, beam_df in projected.groupby("beam_id"):
         if beam_df.empty:
             continue
-        lon0 = float(beam_df['longitude'].iloc[0])
-        lat0 = float(beam_df['latitude'].iloc[0])
+        lon0 = float(beam_df["longitude"].iloc[0])
+        lat0 = float(beam_df["latitude"].iloc[0])
         epsg = convert_wgs_to_utm(lon0, lat0)
         proj = Proj(epsg)
-        x, y = proj(beam_df['longitude'].to_numpy(dtype=float), beam_df['latitude'].to_numpy(dtype=float))
-        projected.loc[beam_df.index, 'lon'] = x
-        projected.loc[beam_df.index, 'lat'] = y
+        x, y = proj(
+            beam_df["longitude"].to_numpy(dtype=float),
+            beam_df["latitude"].to_numpy(dtype=float),
+        )
+        projected.loc[beam_df.index, "lon"] = x
+        projected.loc[beam_df.index, "lat"] = y
     return projected
 
 
@@ -89,52 +92,77 @@ def sliderule_to_framework_dataset(
     Convert SlideRule ATL03 photon GeoDataFrame to the framework's sea_photon_dataset schema.
     """
     if atl03_gdf is None or len(atl03_gdf) == 0:
-        return pd.DataFrame(columns=[
-            'beam_id', 'latitude', 'longitude', 'lat', 'lon', 'photon_height',
-            'quality_ph', 'photon_conf', 'ref_elevation', 'ref_azimuth',
-            'relative_AT_dist', 'solar_elevation', 'background_rate', 'is_land_label'
-        ])
+        return pd.DataFrame(
+            columns=[
+                "beam_id",
+                "latitude",
+                "longitude",
+                "lat",
+                "lon",
+                "photon_height",
+                "quality_ph",
+                "photon_conf",
+                "ref_elevation",
+                "ref_azimuth",
+                "relative_AT_dist",
+                "solar_elevation",
+                "background_rate",
+                "is_land_label",
+            ]
+        )
 
     src = pd.DataFrame(atl03_gdf).copy()
-    src['beam_id'] = _get_beam_id_from_track_pair(src)
+    src["beam_id"] = _get_beam_id_from_track_pair(src)
     if strong_beams_only:
         strong_suffix = _infer_strong_beam_suffix(src)
-        if strong_suffix in ('l', 'r'):
-            src = src[src['beam_id'].str.endswith(strong_suffix)]
+        if strong_suffix in ("l", "r"):
+            src = src[src["beam_id"].str.endswith(strong_suffix)]
 
-    out = pd.DataFrame({
-        'beam_id': src['beam_id'].astype(str),
-        'latitude': pd.to_numeric(src.get('lat_ph', np.nan), errors='coerce'),
-        'longitude': pd.to_numeric(src.get('lon_ph', np.nan), errors='coerce'),
-        'photon_height': pd.to_numeric(src.get('h_ph', np.nan), errors='coerce'),
-        'quality_ph': pd.to_numeric(src.get('quality_ph', np.nan), errors='coerce'),
-        'ref_elevation': pd.to_numeric(src.get('ref_elev', np.nan), errors='coerce'),
-        'ref_azimuth': pd.to_numeric(src.get('ref_azimuth', np.nan), errors='coerce'),
-        'solar_elevation': pd.to_numeric(src.get('solar_elevation', np.nan), errors='coerce'),
-        'background_rate': pd.to_numeric(src.get('bckgrd_rate', np.nan), errors='coerce'),
-        'delta_time': pd.to_numeric(src.get('delta_time', np.nan), errors='coerce'),
-        'segment_dist': pd.to_numeric(src.get('segment_dist', np.nan), errors='coerce'),
-    })
+    out = pd.DataFrame(
+        {
+            "beam_id": src["beam_id"].astype(str),
+            "latitude": pd.to_numeric(src.get("lat_ph", np.nan), errors="coerce"),
+            "longitude": pd.to_numeric(src.get("lon_ph", np.nan), errors="coerce"),
+            "photon_height": pd.to_numeric(src.get("h_ph", np.nan), errors="coerce"),
+            "quality_ph": pd.to_numeric(src.get("quality_ph", np.nan), errors="coerce"),
+            "ref_elevation": pd.to_numeric(
+                src.get("ref_elev", np.nan), errors="coerce"
+            ),
+            "ref_azimuth": pd.to_numeric(
+                src.get("ref_azimuth", np.nan), errors="coerce"
+            ),
+            "solar_elevation": pd.to_numeric(
+                src.get("solar_elevation", np.nan), errors="coerce"
+            ),
+            "background_rate": pd.to_numeric(
+                src.get("bckgrd_rate", np.nan), errors="coerce"
+            ),
+            "delta_time": pd.to_numeric(src.get("delta_time", np.nan), errors="coerce"),
+            "segment_dist": pd.to_numeric(
+                src.get("segment_dist", np.nan), errors="coerce"
+            ),
+        }
+    )
 
-    if 'signal_conf_ph' in src.columns:
-        out['photon_conf'] = _normalize_signal_conf(src['signal_conf_ph'])
+    if "signal_conf_ph" in src.columns:
+        out["photon_conf"] = _normalize_signal_conf(src["signal_conf_ph"])
     else:
-        out['photon_conf'] = np.nan
+        out["photon_conf"] = np.nan
 
-    out = out.dropna(subset=['latitude', 'longitude', 'photon_height']).copy()
+    out = out.dropna(subset=["latitude", "longitude", "photon_height"]).copy()
     out = _project_to_utm(out)
-    out['relative_AT_dist'] = _relative_distance_km_per_beam(out)
-    out['is_land_label'] = 0
+    out["relative_AT_dist"] = _relative_distance_km_per_beam(out)
+    out["is_land_label"] = 0
 
-    return out.drop(columns=['delta_time', 'segment_dist'], errors='ignore')
+    return out.drop(columns=["delta_time", "segment_dist"], errors="ignore")
 
 
 def fetch_sliderule_atl03(
-    region: List[Dict[str, float]],
+    region: list[dict[str, float]],
     t0: str,
     t1: str,
-    rgt: Optional[int] = None,
-    ph_fields: Optional[List[str]] = None,
+    rgt: int | None = None,
+    ph_fields: list[str] | None = None,
     sliderule_url: str = "slideruleearth.io",
     verbose: bool = False,
 ):
@@ -142,14 +170,25 @@ def fetch_sliderule_atl03(
     Fetch ATL03 photons from SlideRule.
     """
     try:
-        from sliderule import sliderule, icesat2
+        from sliderule import icesat2, sliderule
     except Exception as e:
-        raise ImportError("sliderule package is required for SlideRule ingestion.") from e
+        raise ImportError(
+            "sliderule package is required for SlideRule ingestion."
+        ) from e
 
     sliderule.init(sliderule_url, verbose=verbose)
     fields = ph_fields or [
-        "delta_time", "lat_ph", "lon_ph", "h_ph", "quality_ph", "signal_conf_ph",
-        "segment_dist", "ref_elev", "ref_azimuth", "solar_elevation", "bckgrd_rate",
+        "delta_time",
+        "lat_ph",
+        "lon_ph",
+        "h_ph",
+        "quality_ph",
+        "signal_conf_ph",
+        "segment_dist",
+        "ref_elev",
+        "ref_azimuth",
+        "solar_elevation",
+        "bckgrd_rate",
     ]
     params = {"poly": region, "t0": t0, "t1": t1, "atl03_ph_fields": fields}
     if rgt is not None:
@@ -158,10 +197,10 @@ def fetch_sliderule_atl03(
 
 
 def fetch_and_prepare_sliderule_dataset(
-    region: List[Dict[str, float]],
+    region: list[dict[str, float]],
     t0: str,
     t1: str,
-    rgt: Optional[int] = None,
+    rgt: int | None = None,
     strong_beams_only: bool = True,
     sliderule_url: str = "slideruleearth.io",
     verbose: bool = False,
@@ -178,4 +217,6 @@ def fetch_and_prepare_sliderule_dataset(
         sliderule_url=sliderule_url,
         verbose=verbose,
     )
-    return sliderule_to_framework_dataset(atl03_gdf, strong_beams_only=strong_beams_only)
+    return sliderule_to_framework_dataset(
+        atl03_gdf, strong_beams_only=strong_beams_only
+    )

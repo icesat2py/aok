@@ -1,40 +1,26 @@
 # utils/data_processing.py
 
 
-import re
-import os
 import io
-import time
-import math
-import h5py
 import logging
-import netCDF4
-import numpy as np
+import math
+import os
+import re
+
 import geopandas as gpd
-
-import pandas as pd
-from datetime import datetime
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from scipy.spatial import ConvexHull
-
-import argparse
-import subprocess
-# import fiona
-import utm
-import pyproj
-from pyproj import Transformer, Proj
+import h5py
 
 # from pyproj import Transformer
-from matplotlib.widgets import LassoSelector
-from matplotlib.path import Path
+import numpy as np
+import pandas as pd
+from pyproj import Proj, Transformer
+from scipy.spatial import ConvexHull
 
-from sklearn.cluster import DBSCAN
+# import fiona
 from .interpolation import *
 
 
-
-#this function from icesat2_toolkit
+# this function from icesat2_toolkit
 # PURPOSE: read ICESat-2 ATL03 HDF5 data files
 def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     """
@@ -58,9 +44,9 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     """
     # Open the HDF5 file for reading
     if isinstance(FILENAME, io.IOBase):
-        fileID = h5py.File(FILENAME, 'r')
+        fileID = h5py.File(FILENAME, "r")
     else:
-        fileID = h5py.File(os.path.expanduser(FILENAME), 'r')
+        fileID = h5py.File(os.path.expanduser(FILENAME), "r")
 
     # Output HDF5 file information
     logging.info(fileID.filename)
@@ -72,12 +58,12 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
 
     # read each input beam within the file
     IS2_atl03_beams = []
-    for gtx in [k for k in fileID.keys() if bool(re.match(r'gt\d[lr]',k))]:
+    for gtx in [k for k in fileID.keys() if bool(re.match(r"gt\d[lr]", k))]:
         # check if subsetted beam contains data
         # check in both the geolocation and heights groups
         try:
-            fileID[gtx]['geolocation']['segment_id']
-            fileID[gtx]['heights']['delta_time']
+            fileID[gtx]["geolocation"]["segment_id"]
+            fileID[gtx]["heights"]["delta_time"]
         except KeyError:
             pass
         else:
@@ -85,82 +71,81 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
 
     # for each included beam
     for gtx in IS2_atl03_beams:
-        
         # -------------------------------------------
         # 1. make sure the beam-level dict exists
         IS2_atl03_attrs.setdefault(gtx, {})
         # 2. always save the two “must-have” attributes
-        for key in ('atlas_beam_type', 'atlas_spot_number'):
+        for key in ("atlas_beam_type", "atlas_spot_number"):
             IS2_atl03_attrs[gtx][key] = fileID[gtx].attrs[key]
-        
+
         # get each HDF5 variable
         IS2_atl03_mds[gtx] = {}
-        IS2_atl03_mds[gtx]['heights'] = {}
-        IS2_atl03_mds[gtx]['geolocation'] = {}
-        IS2_atl03_mds[gtx]['bckgrd_atlas'] = {}
-        IS2_atl03_mds[gtx]['geophys_corr'] = {}
+        IS2_atl03_mds[gtx]["heights"] = {}
+        IS2_atl03_mds[gtx]["geolocation"] = {}
+        IS2_atl03_mds[gtx]["bckgrd_atlas"] = {}
+        IS2_atl03_mds[gtx]["geophys_corr"] = {}
         # ICESat-2 Measurement Group
-        for key,val in fileID[gtx]['heights'].items():
-            IS2_atl03_mds[gtx]['heights'][key] = val[:]
+        for key, val in fileID[gtx]["heights"].items():
+            IS2_atl03_mds[gtx]["heights"][key] = val[:]
         # ICESat-2 Geolocation Group
-        for key,val in fileID[gtx]['geolocation'].items():
-            IS2_atl03_mds[gtx]['geolocation'][key] = val[:]
+        for key, val in fileID[gtx]["geolocation"].items():
+            IS2_atl03_mds[gtx]["geolocation"][key] = val[:]
         # ICESat-2 Background Photon Rate Group
-        for key,val in fileID[gtx]['bckgrd_atlas'].items():
-            IS2_atl03_mds[gtx]['bckgrd_atlas'][key] = val[:]
+        for key, val in fileID[gtx]["bckgrd_atlas"].items():
+            IS2_atl03_mds[gtx]["bckgrd_atlas"][key] = val[:]
         # ICESat-2 Geophysical Corrections Group: Values for tides (ocean,
         # solid earth, pole, load, and equilibrium), inverted barometer (IB)
         # effects, and range corrections for tropospheric delays
-        for key,val in fileID[gtx]['geophys_corr'].items():
-            IS2_atl03_mds[gtx]['geophys_corr'][key] = val[:]
+        for key, val in fileID[gtx]["geophys_corr"].items():
+            IS2_atl03_mds[gtx]["geophys_corr"][key] = val[:]
 
         # Getting attributes of included variables
         if ATTRIBUTES:
             # Getting attributes of IS2_atl03_mds beam variables
             IS2_atl03_attrs[gtx] = {}
-            IS2_atl03_attrs[gtx]['heights'] = {}
-            IS2_atl03_attrs[gtx]['geolocation'] = {}
-            IS2_atl03_attrs[gtx]['bckgrd_atlas'] = {}
-            IS2_atl03_attrs[gtx]['geophys_corr'] = {}
-            
+            IS2_atl03_attrs[gtx]["heights"] = {}
+            IS2_atl03_attrs[gtx]["geolocation"] = {}
+            IS2_atl03_attrs[gtx]["bckgrd_atlas"] = {}
+            IS2_atl03_attrs[gtx]["geophys_corr"] = {}
+
             # Global Group Attributes
-            for att_name,att_val in fileID[gtx].attrs.items():
+            for att_name, att_val in fileID[gtx].attrs.items():
                 IS2_atl03_attrs[gtx][att_name] = att_val
             # ICESat-2 Measurement Group
-            for key,val in fileID[gtx]['heights'].items():
-                IS2_atl03_attrs[gtx]['heights'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['heights'][key][att_name]=att_val
+            for key, val in fileID[gtx]["heights"].items():
+                IS2_atl03_attrs[gtx]["heights"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["heights"][key][att_name] = att_val
             # ICESat-2 Geolocation Group
-            for key,val in fileID[gtx]['geolocation'].items():
-                IS2_atl03_attrs[gtx]['geolocation'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['geolocation'][key][att_name]=att_val
+            for key, val in fileID[gtx]["geolocation"].items():
+                IS2_atl03_attrs[gtx]["geolocation"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["geolocation"][key][att_name] = att_val
             # ICESat-2 Background Photon Rate Group
-            for key,val in fileID[gtx]['bckgrd_atlas'].items():
-                IS2_atl03_attrs[gtx]['bckgrd_atlas'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['bckgrd_atlas'][key][att_name]=att_val
+            for key, val in fileID[gtx]["bckgrd_atlas"].items():
+                IS2_atl03_attrs[gtx]["bckgrd_atlas"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["bckgrd_atlas"][key][att_name] = att_val
             # ICESat-2 Geophysical Corrections Group
-            for key,val in fileID[gtx]['geophys_corr'].items():
-                IS2_atl03_attrs[gtx]['geophys_corr'][key] = {}
-                for att_name,att_val in val.attrs.items():
-                    IS2_atl03_attrs[gtx]['geophys_corr'][key][att_name]=att_val
+            for key, val in fileID[gtx]["geophys_corr"].items():
+                IS2_atl03_attrs[gtx]["geophys_corr"][key] = {}
+                for att_name, att_val in val.attrs.items():
+                    IS2_atl03_attrs[gtx]["geophys_corr"][key][att_name] = att_val
 
     # ICESat-2 spacecraft orientation at time
-    IS2_atl03_mds['orbit_info'] = {}
-    IS2_atl03_attrs['orbit_info'] = {}
-    for key,val in fileID['orbit_info'].items():
-        IS2_atl03_mds['orbit_info'][key] = val[:]
+    IS2_atl03_mds["orbit_info"] = {}
+    IS2_atl03_attrs["orbit_info"] = {}
+    for key, val in fileID["orbit_info"].items():
+        IS2_atl03_mds["orbit_info"][key] = val[:]
         # Getting attributes of group and included variables
         if ATTRIBUTES:
             # Global Group Attributes
-            for att_name,att_val in fileID['orbit_info'].attrs.items():
-                IS2_atl03_attrs['orbit_info'][att_name] = att_val
+            for att_name, att_val in fileID["orbit_info"].attrs.items():
+                IS2_atl03_attrs["orbit_info"][att_name] = att_val
             # Variable Attributes
-            IS2_atl03_attrs['orbit_info'][key] = {}
-            for att_name,att_val in val.attrs.items():
-                IS2_atl03_attrs['orbit_info'][key][att_name] = att_val
+            IS2_atl03_attrs["orbit_info"][key] = {}
+            for att_name, att_val in val.attrs.items():
+                IS2_atl03_attrs["orbit_info"][key][att_name] = att_val
 
     # information ancillary to the data product
     # number of GPS seconds between the GPS epoch (1980-01-06T00:00:00Z UTC)
@@ -168,91 +153,108 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
     # Add this value to delta time parameters to compute full gps_seconds
     # could alternatively use the Julian day of the ATLAS SDP epoch: 2458119.5
     # and add leap seconds since 2018-01-01T00:00:00Z UTC (ATLAS SDP epoch)
-    IS2_atl03_mds['ancillary_data'] = {}
-    IS2_atl03_attrs['ancillary_data'] = {}
-    ancillary_keys = ['atlas_sdp_gps_epoch','data_end_utc','data_start_utc',
-        'end_cycle','end_geoseg','end_gpssow','end_gpsweek','end_orbit',
-        'end_region','end_rgt','granule_end_utc','granule_start_utc','release',
-        'start_cycle','start_geoseg','start_gpssow','start_gpsweek',
-        'start_orbit','start_region','start_rgt','version']
+    IS2_atl03_mds["ancillary_data"] = {}
+    IS2_atl03_attrs["ancillary_data"] = {}
+    ancillary_keys = [
+        "atlas_sdp_gps_epoch",
+        "data_end_utc",
+        "data_start_utc",
+        "end_cycle",
+        "end_geoseg",
+        "end_gpssow",
+        "end_gpsweek",
+        "end_orbit",
+        "end_region",
+        "end_rgt",
+        "granule_end_utc",
+        "granule_start_utc",
+        "release",
+        "start_cycle",
+        "start_geoseg",
+        "start_gpssow",
+        "start_gpsweek",
+        "start_orbit",
+        "start_region",
+        "start_rgt",
+        "version",
+    ]
     for key in ancillary_keys:
         # get each HDF5 variable
-        IS2_atl03_mds['ancillary_data'][key] = fileID['ancillary_data'][key][:]
+        IS2_atl03_mds["ancillary_data"][key] = fileID["ancillary_data"][key][:]
         # Getting attributes of group and included variables
         if ATTRIBUTES:
             # Variable Attributes
-            IS2_atl03_attrs['ancillary_data'][key] = {}
-            for att_name,att_val in fileID['ancillary_data'][key].attrs.items():
-                IS2_atl03_attrs['ancillary_data'][key][att_name] = att_val
+            IS2_atl03_attrs["ancillary_data"][key] = {}
+            for att_name, att_val in fileID["ancillary_data"][key].attrs.items():
+                IS2_atl03_attrs["ancillary_data"][key][att_name] = att_val
 
     # transmit-echo-path (tep) parameters
-    IS2_atl03_mds['ancillary_data']['tep'] = {}
-    IS2_atl03_attrs['ancillary_data']['tep'] = {}
-    for key,val in fileID['ancillary_data']['tep'].items():
+    IS2_atl03_mds["ancillary_data"]["tep"] = {}
+    IS2_atl03_attrs["ancillary_data"]["tep"] = {}
+    for key, val in fileID["ancillary_data"]["tep"].items():
         # get each HDF5 variable
-        IS2_atl03_mds['ancillary_data']['tep'][key] = val[:]
+        IS2_atl03_mds["ancillary_data"]["tep"][key] = val[:]
         # Getting attributes of group and included variables
         if ATTRIBUTES:
             # Variable Attributes
-            IS2_atl03_attrs['ancillary_data']['tep'][key] = {}
-            for att_name,att_val in val.attrs.items():
-                IS2_atl03_attrs['ancillary_data']['tep'][key][att_name] = att_val
+            IS2_atl03_attrs["ancillary_data"]["tep"][key] = {}
+            for att_name, att_val in val.attrs.items():
+                IS2_atl03_attrs["ancillary_data"]["tep"][key][att_name] = att_val
 
     # channel dead time and first photon bias derived from ATLAS calibration
-    cal1,cal2 = ('ancillary_data','calibrations')
-    for var in ['dead_time','first_photon_bias']:
+    cal1, cal2 = ("ancillary_data", "calibrations")
+    for var in ["dead_time", "first_photon_bias"]:
         IS2_atl03_mds[cal1][var] = {}
         IS2_atl03_attrs[cal1][var] = {}
-        for key,val in fileID[cal1][cal2][var].items():
+        for key, val in fileID[cal1][cal2][var].items():
             # get each HDF5 variable
             if isinstance(val, h5py.Dataset):
                 IS2_atl03_mds[cal1][var][key] = val[:]
             elif isinstance(val, h5py.Group):
                 IS2_atl03_mds[cal1][var][key] = {}
-                for k,v in val.items():
+                for k, v in val.items():
                     IS2_atl03_mds[cal1][var][key][k] = v[:]
             # Getting attributes of group and included variables
             if ATTRIBUTES:
                 # Variable Attributes
                 IS2_atl03_attrs[cal1][var][key] = {}
-                for att_name,att_val in val.attrs.items():
+                for att_name, att_val in val.attrs.items():
                     IS2_atl03_attrs[cal1][var][key][att_name] = att_val
                 if isinstance(val, h5py.Group):
-                    for k,v in val.items():
+                    for k, v in val.items():
                         IS2_atl03_attrs[cal1][var][key][k] = {}
-                        for att_name,att_val in val.attrs.items():
-                            IS2_atl03_attrs[cal1][var][key][k][att_name]=att_val
+                        for att_name, att_val in val.attrs.items():
+                            IS2_atl03_attrs[cal1][var][key][k][att_name] = att_val
 
     # get ATLAS impulse response variables for the transmitter echo path (TEP)
-    tep1,tep2 = ('atlas_impulse_response','tep_histogram')
+    tep1, tep2 = ("atlas_impulse_response", "tep_histogram")
     IS2_atl03_mds[tep1] = {}
     IS2_atl03_attrs[tep1] = {}
-    for pce in ['pce1_spot1','pce2_spot3']:
-        IS2_atl03_mds[tep1][pce] = {tep2:{}}
-        IS2_atl03_attrs[tep1][pce] = {tep2:{}}
+    for pce in ["pce1_spot1", "pce2_spot3"]:
+        IS2_atl03_mds[tep1][pce] = {tep2: {}}
+        IS2_atl03_attrs[tep1][pce] = {tep2: {}}
         # for each TEP variable
-        for key,val in fileID[tep1][pce][tep2].items():
+        for key, val in fileID[tep1][pce][tep2].items():
             IS2_atl03_mds[tep1][pce][tep2][key] = val[:]
             # Getting attributes of included variables
             if ATTRIBUTES:
                 # Global Group Attributes
-                for att_name,att_val in fileID[tep1][pce][tep2].attrs.items():
+                for att_name, att_val in fileID[tep1][pce][tep2].attrs.items():
                     IS2_atl03_attrs[tep1][pce][tep2][att_name] = att_val
                 # Variable Attributes
                 IS2_atl03_attrs[tep1][pce][tep2][key] = {}
-                for att_name,att_val in val.attrs.items():
+                for att_name, att_val in val.attrs.items():
                     IS2_atl03_attrs[tep1][pce][tep2][key][att_name] = att_val
 
     # Global File Attributes
     if ATTRIBUTES:
-        for att_name,att_val in fileID.attrs.items():
+        for att_name, att_val in fileID.attrs.items():
             IS2_atl03_attrs[att_name] = att_val
 
     # Closing the HDF5 file
     fileID.close()
     # Return the datasets and variables
-    return (IS2_atl03_mds,IS2_atl03_attrs,IS2_atl03_beams)
-
+    return (IS2_atl03_mds, IS2_atl03_attrs, IS2_atl03_beams)
 
 
 # convert_wgs_to_utm function, see https://stackoverflow.com/a/40140326/4556479
@@ -260,22 +262,22 @@ def convert_wgs_to_utm(lon: float, lat: float):
     """Based on lat and lng, return best utm epsg-code"""
     utm_band = str((math.floor((lon + 180) / 6) % 60) + 1)
     if len(utm_band) == 1:
-        utm_band = '0' + utm_band
+        utm_band = "0" + utm_band
     if lat >= 0:
-        epsg_code = 'epsg:326' + utm_band
+        epsg_code = "epsg:326" + utm_band
         return epsg_code
-    epsg_code = 'epsg:327' + utm_band
+    epsg_code = "epsg:327" + utm_band
     return epsg_code
 
 
 def orthometric_correction(lat, lon, Z, epsg):
     # Define the Proj string
-    #To transform from WGS84 ellipsoidal height
+    # To transform from WGS84 ellipsoidal height
     # to EGM2008 orthometric height using PyProj
     # proj_string = '+proj=latlong +ellps=WGS84 +datum=WGS84 +vunits=m +no_defs +geoidgrids=egm2008-1.gtx'
     # # Define the Proj string for WGS84 ellipsoidal height
     # wgs84_proj_string = '+proj=latlong +ellps=WGS84 +datum=WGS84 +no_defs'
-    
+
     # # Define the Proj string for EGM2008 orthometric height: egm08_25,egm2008-1
     # egm2008_proj_string = \
     #     '+proj=latlong +ellps=WGS84 +datum=WGS84 +no_defs ' \
@@ -293,7 +295,6 @@ def orthometric_correction(lat, lon, Z, epsg):
     return Y_utm, X_utm, Z_egm08
 
 
-
 def load_data(file_path, read_attributes=False):
     """
     Wrapper around read_granule that lets you decide
@@ -307,10 +308,8 @@ def load_data(file_path, read_attributes=False):
         If True, read_granule returns the full IS2_atl03_attrs tree.
         Defaults to False.
     """
-    
-    
-    return read_granule(file_path, ATTRIBUTES = read_attributes)
 
+    return read_granule(file_path, ATTRIBUTES=read_attributes)
 
 
 # requires that the input gdf has ranged index values i
@@ -321,16 +320,15 @@ def load_data(file_path, read_attributes=False):
 def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
     # try loading the shoreline data
     try:
-        ICESat2_GDF.insert(0, 'lat', ICESat2_GDF.geometry.y, False)
-        ICESat2_GDF.insert(0, 'lon', ICESat2_GDF.geometry.x, False)
+        ICESat2_GDF.insert(0, "lat", ICESat2_GDF.geometry.y, False)
+        ICESat2_GDF.insert(0, "lon", ICESat2_GDF.geometry.x, False)
 
         # allocation of to be used arrays
         zero_int_array = np.int64(np.zeros_like(ICESat2_GDF.geometry.x))
 
         # Land flag initialized as -1
         # If shorelines downloaded already, will be set to 0 or 1
-        ICESat2_GDF.insert(0, 'is_land',
-                           zero_int_array - 1, False)
+        ICESat2_GDF.insert(0, "is_land", zero_int_array - 1, False)
 
         # set the projection
         ICESat2_GDF.set_crs("EPSG:4326", inplace=True)
@@ -341,13 +339,15 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         # engine str, 'fiona' or 'pyogrio'
         # somtime it gives error if using fiona
         # land_polygon_gdf = gpd.read_file(shoreline_data_path, bbox=ICESat2_GDF, engine='fiona')
-        land_polygon_gdf = gpd.read_file(shoreline_data_path, bbox=ICESat2_GDF, engine='pyogrio')
+        land_polygon_gdf = gpd.read_file(
+            shoreline_data_path, bbox=ICESat2_GDF, engine="pyogrio"
+        )
 
         # continue with getting a new array of 0-or-1 labels for each photon
         land_point_labels = np.zeros_like(ICESat2_GDF.is_land.values)
 
         # update labels for points in the land polygons
-        pts_in_land = gpd.sjoin(ICESat2_GDF, land_polygon_gdf, predicate='within')
+        pts_in_land = gpd.sjoin(ICESat2_GDF, land_polygon_gdf, predicate="within")
 
         # get land or not bool value
         land_loc = ICESat2_GDF.index.isin(pts_in_land.index)
@@ -359,7 +359,6 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         return land_point_labels
 
     except Exception as e:
-
         print(e)
 
         print("Error loading shoreline data, returning -1s for is_land flag")
@@ -370,37 +369,64 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         return -np.ones_like(ICESat2_GDF.is_land.values)
 
 
-def create_photon_dataframe(lat_ph, lon_ph, ref_elev, ref_azimuth, geoid, h_ph, \
-                            quality_ph, is_land_label_interp1d, signal_conf_photon, x_atc, relative_AT_dist,
-                            solar_elevation=None, background_rate=None):
+def create_photon_dataframe(
+    lat_ph,
+    lon_ph,
+    ref_elev,
+    ref_azimuth,
+    geoid,
+    h_ph,
+    quality_ph,
+    is_land_label_interp1d,
+    signal_conf_photon,
+    x_atc,
+    relative_AT_dist,
+    solar_elevation=None,
+    background_rate=None,
+):
     # Apply geoid correction to the photon heights to convert them from ellipsoidal to orthometric heights
     h_ph_geoid_cor = h_ph[:] - geoid[:]
-    
-    # Determine the EPSG code for the UTM zone based on the first photon's longitude and latitude   
+
+    # Determine the EPSG code for the UTM zone based on the first photon's longitude and latitude
     epsg_code = convert_wgs_to_utm(lon_ph[0], lat_ph[0])
-    
+
     # Perform orthometric correction to obtain UTM coordinates and corrected heights
     lat_utm, lon_utm, h_ph_cor = orthometric_correction(lat_ph, lon_ph, h_ph, epsg_code)
-    
+
     # Put the data into the dataframe
-    sea_photon_dataset = pd.DataFrame({
-        'latitude': lat_ph,
-        'longitude': lon_ph,
-        'lat': lat_utm,
-        'lon': lon_utm,
-        'photon_height': h_ph_geoid_cor,
-        'quality_ph': quality_ph,
-        'is_land_label': is_land_label_interp1d,
-        'photon_conf': signal_conf_photon,
-        'ref_elevation': ref_elev,
-        'ref_azimuth': ref_azimuth,
-        'relative_AT_dist': relative_AT_dist
-    }, columns=['latitude', 'longitude', 'lat', 'lon', 'photon_height', 'quality_ph', 'is_land_label', 'photon_conf', 'ref_elevation', 'ref_azimuth', 'relative_AT_dist'])
+    sea_photon_dataset = pd.DataFrame(
+        {
+            "latitude": lat_ph,
+            "longitude": lon_ph,
+            "lat": lat_utm,
+            "lon": lon_utm,
+            "photon_height": h_ph_geoid_cor,
+            "quality_ph": quality_ph,
+            "is_land_label": is_land_label_interp1d,
+            "photon_conf": signal_conf_photon,
+            "ref_elevation": ref_elev,
+            "ref_azimuth": ref_azimuth,
+            "relative_AT_dist": relative_AT_dist,
+        },
+        columns=[
+            "latitude",
+            "longitude",
+            "lat",
+            "lon",
+            "photon_height",
+            "quality_ph",
+            "is_land_label",
+            "photon_conf",
+            "ref_elevation",
+            "ref_azimuth",
+            "relative_AT_dist",
+        ],
+    )
 
     if solar_elevation is not None:
-        sea_photon_dataset['solar_elevation'] = solar_elevation
+        sea_photon_dataset["solar_elevation"] = solar_elevation
     if background_rate is not None:
-        sea_photon_dataset['background_rate'] = background_rate
+        sea_photon_dataset["background_rate"] = background_rate
 
     return sea_photon_dataset
 
@@ -424,7 +450,13 @@ def interpolate_by_time(source_time, source_values, target_time):
     if unique_time.size < 2:
         return np.full_like(target_time, unique_values[0], dtype=float)
 
-    return np.interp(target_time, unique_time, unique_values, left=unique_values[0], right=unique_values[-1])
+    return np.interp(
+        target_time,
+        unique_time,
+        unique_values,
+        left=unique_values[0],
+        right=unique_values[-1],
+    )
 
 
 def apply_optional_solar_background_filter(
@@ -432,7 +464,7 @@ def apply_optional_solar_background_filter(
     enabled=False,
     day_threshold=6.0,
     background_quantile=0.8,
-    min_signal_conf=2
+    min_signal_conf=2,
 ):
     """
     Optionally filter photons under strong daytime solar background conditions.
@@ -441,39 +473,46 @@ def apply_optional_solar_background_filter(
     if not enabled:
         return sea_photon_dataset
 
-    required_cols = {'solar_elevation', 'background_rate', 'photon_conf'}
+    required_cols = {"solar_elevation", "background_rate", "photon_conf"}
     if not required_cols.issubset(set(sea_photon_dataset.columns)):
-        logger.warning("Solar background filter skipped because required columns are missing.")
+        logger.warning(
+            "Solar background filter skipped because required columns are missing."
+        )
         return sea_photon_dataset
 
     filtered_dataset = sea_photon_dataset.copy()
-    daytime_mask = filtered_dataset['solar_elevation'] >= day_threshold
-    daytime_background = filtered_dataset.loc[daytime_mask, 'background_rate']
+    daytime_mask = filtered_dataset["solar_elevation"] >= day_threshold
+    daytime_background = filtered_dataset.loc[daytime_mask, "background_rate"]
     daytime_background = daytime_background[np.isfinite(daytime_background)]
 
     if daytime_background.empty:
-        logger.info("Solar background filter enabled, but no valid daytime photons were found.")
+        logger.info(
+            "Solar background filter enabled, but no valid daytime photons were found."
+        )
         return filtered_dataset
 
     quantile_threshold = daytime_background.quantile(background_quantile)
-    noisy_daytime_mask = daytime_mask & (filtered_dataset['background_rate'] >= quantile_threshold)
-    keep_mask = (~noisy_daytime_mask) | (filtered_dataset['photon_conf'] >= min_signal_conf)
+    noisy_daytime_mask = daytime_mask & (
+        filtered_dataset["background_rate"] >= quantile_threshold
+    )
+    keep_mask = (~noisy_daytime_mask) | (
+        filtered_dataset["photon_conf"] >= min_signal_conf
+    )
 
     before_count = len(filtered_dataset)
     filtered_dataset = filtered_dataset.loc[keep_mask].copy()
     after_count = len(filtered_dataset)
     logger.info(
         "Solar background filter removed %s photons (from %s to %s).",
-        before_count - after_count, before_count, after_count
+        before_count - after_count,
+        before_count,
+        after_count,
     )
     return filtered_dataset
 
 
 def apply_optional_ir_ap_filter(
-    sea_photon_dataset,
-    enabled=False,
-    quality_max=0,
-    min_signal_conf=0
+    sea_photon_dataset, enabled=False, quality_max=0, min_signal_conf=0
 ):
     """
     Optionally remove likely flagged photons as an IR/afterpulse proxy.
@@ -487,14 +526,14 @@ def apply_optional_ir_ap_filter(
     filtered_dataset = sea_photon_dataset.copy()
     keep_mask = np.ones(len(filtered_dataset), dtype=bool)
 
-    if 'quality_ph' in filtered_dataset.columns:
-        quality_values = pd.to_numeric(filtered_dataset['quality_ph'], errors='coerce')
+    if "quality_ph" in filtered_dataset.columns:
+        quality_values = pd.to_numeric(filtered_dataset["quality_ph"], errors="coerce")
         keep_mask &= quality_values <= quality_max
     else:
         logger.warning("IR/AP filter enabled, but quality_ph is missing.")
 
-    if 'photon_conf' in filtered_dataset.columns:
-        conf_values = pd.to_numeric(filtered_dataset['photon_conf'], errors='coerce')
+    if "photon_conf" in filtered_dataset.columns:
+        conf_values = pd.to_numeric(filtered_dataset["photon_conf"], errors="coerce")
         keep_mask &= conf_values >= min_signal_conf
     else:
         logger.warning("IR/AP filter enabled, but photon_conf is missing.")
@@ -504,7 +543,9 @@ def apply_optional_ir_ap_filter(
     after_count = len(filtered_dataset)
     logger.info(
         "IR/AP proxy filter removed %s photons (from %s to %s).",
-        before_count - after_count, before_count, after_count
+        before_count - after_count,
+        before_count,
+        after_count,
     )
     return filtered_dataset
 
@@ -524,105 +565,126 @@ def Extract_sea_photons(IS2_atl03_mds, target_strong_beams, shoreline_data_path)
     Segment_ref_azimuth = {}
     background_rate = {}
     background_counts = {}
-    
+
     # Initialize a list to store data for each beam
     beam_datasets = []
-    
-    
+
     # Loop over each strong beam in target_strong_beams
     for gtx in target_strong_beams:
-        print('Processing strong beam ID:', gtx)
-        
+        print("Processing strong beam ID:", gtx)
+
         # Access the data for the current beam
         IS2_val = IS2_atl03_mds[gtx]
-        
+
         # Initialize dictionaries to store segment data for the beam
-        Segment_ID[gtx] = IS2_val['geolocation']['segment_id']
+        Segment_ID[gtx] = IS2_val["geolocation"]["segment_id"]
         n_seg = len(Segment_ID[gtx])
-        n_pe, = IS2_val['heights']['delta_time'].shape
-        Segment_Index_begin[gtx] = IS2_val['geolocation']['ph_index_beg'] - 1
-        Segment_PE_count[gtx] = IS2_val['geolocation']['segment_ph_cnt']
-        Equator_Segment_Distance[gtx] = IS2_val['geolocation']['segment_dist_x']
-        Segment_Length[gtx] = IS2_val['geolocation']['segment_length']
-        delta_time = IS2_val['geolocation']['delta_time']
-        segment_lat = IS2_val['geolocation']['reference_photon_lat'][:].copy()
-        segment_lon = IS2_val['geolocation']['reference_photon_lon'][:].copy()
-        ref_elev = IS2_val['geolocation']['ref_elev'][:].copy()
-        ref_azimuth = IS2_val['geolocation']['ref_azimuth'][:].copy()
-        geoid = IS2_val['geophys_corr']['geoid'][:].copy()
-        h_ph = IS2_val['heights']['h_ph'][:].copy()
-        photon_delta_time = IS2_val['heights']['delta_time'][:].copy()
-        lat_ph = IS2_val['heights']['lat_ph'][:].copy()
-        lon_ph = IS2_val['heights']['lon_ph'][:].copy()
-        signal_conf_photon = IS2_val['heights']['signal_conf_ph'][..., 0].copy()
-        x_atc = IS2_val['heights']['dist_ph_along'][:].copy()
-        y_atc = IS2_val['heights']['dist_ph_across'][:].copy()
-        quality_ph = IS2_val['heights']['quality_ph']
+        (n_pe,) = IS2_val["heights"]["delta_time"].shape
+        Segment_Index_begin[gtx] = IS2_val["geolocation"]["ph_index_beg"] - 1
+        Segment_PE_count[gtx] = IS2_val["geolocation"]["segment_ph_cnt"]
+        Equator_Segment_Distance[gtx] = IS2_val["geolocation"]["segment_dist_x"]
+        Segment_Length[gtx] = IS2_val["geolocation"]["segment_length"]
+        delta_time = IS2_val["geolocation"]["delta_time"]
+        segment_lat = IS2_val["geolocation"]["reference_photon_lat"][:].copy()
+        segment_lon = IS2_val["geolocation"]["reference_photon_lon"][:].copy()
+        ref_elev = IS2_val["geolocation"]["ref_elev"][:].copy()
+        ref_azimuth = IS2_val["geolocation"]["ref_azimuth"][:].copy()
+        geoid = IS2_val["geophys_corr"]["geoid"][:].copy()
+        h_ph = IS2_val["heights"]["h_ph"][:].copy()
+        photon_delta_time = IS2_val["heights"]["delta_time"][:].copy()
+        lat_ph = IS2_val["heights"]["lat_ph"][:].copy()
+        lon_ph = IS2_val["heights"]["lon_ph"][:].copy()
+        signal_conf_photon = IS2_val["heights"]["signal_conf_ph"][..., 0].copy()
+        x_atc = IS2_val["heights"]["dist_ph_along"][:].copy()
+        y_atc = IS2_val["heights"]["dist_ph_across"][:].copy()
+        quality_ph = IS2_val["heights"]["quality_ph"]
 
         # Optional variables for solar background sensitivity testing
         photon_solar_elevation = np.full_like(photon_delta_time, np.nan, dtype=float)
         photon_background_rate = np.full_like(photon_delta_time, np.nan, dtype=float)
-        if 'solar_elevation' in IS2_val['geolocation']:
-            segment_solar_elevation = IS2_val['geolocation']['solar_elevation'][:].copy()
+        if "solar_elevation" in IS2_val["geolocation"]:
+            segment_solar_elevation = IS2_val["geolocation"]["solar_elevation"][
+                :
+            ].copy()
             photon_solar_elevation = interpolate_by_time(
                 delta_time, segment_solar_elevation, photon_delta_time
             )
-        if 'bckgrd_atlas' in IS2_val and 'bckgrd_rate' in IS2_val['bckgrd_atlas'] and 'delta_time' in IS2_val['bckgrd_atlas']:
-            bckgrd_rate = IS2_val['bckgrd_atlas']['bckgrd_rate'][:].copy()
-            bckgrd_time = IS2_val['bckgrd_atlas']['delta_time'][:].copy()
+        if (
+            "bckgrd_atlas" in IS2_val
+            and "bckgrd_rate" in IS2_val["bckgrd_atlas"]
+            and "delta_time" in IS2_val["bckgrd_atlas"]
+        ):
+            bckgrd_rate = IS2_val["bckgrd_atlas"]["bckgrd_rate"][:].copy()
+            bckgrd_time = IS2_val["bckgrd_atlas"]["delta_time"][:].copy()
             photon_background_rate = interpolate_by_time(
                 bckgrd_time, bckgrd_rate, photon_delta_time
             )
 
-        # Adjust x_atc based on segment distances        
+        # Adjust x_atc based on segment distances
         for seg_index in range(n_seg):
             idx = Segment_Index_begin[gtx][seg_index]
             cnt = Segment_PE_count[gtx][seg_index]
-            x_atc[idx:idx + cnt] += Equator_Segment_Distance[gtx][seg_index]
+            x_atc[idx : idx + cnt] += Equator_Segment_Distance[gtx][seg_index]
 
-        # Calculate relative distances        
+        # Calculate relative distances
         relative_AT_dist = (x_atc - x_atc[0]) / 1000
-        relative_seg_dist = (Equator_Segment_Distance[gtx] - Equator_Segment_Distance[gtx][0]) / 1000
-        
+        relative_seg_dist = (
+            Equator_Segment_Distance[gtx] - Equator_Segment_Distance[gtx][0]
+        ) / 1000
+
         # Create a GeoDataFrame to hold segment data for shoreline check
-        Segment_Is_Land['geometry'] = gpd.points_from_xy(segment_lon, segment_lat)
+        Segment_Is_Land["geometry"] = gpd.points_from_xy(segment_lon, segment_lat)
         ICESat2_GDF = gpd.GeoDataFrame(Segment_Is_Land, crs="EPSG:4326")
-        
+
         # Determine if it is land by the land/sea mask
-        Segment_Is_Land_Labels = isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF)
-        ICESat2_GDF.loc[:, 'is_land'] = Segment_Is_Land_Labels
+        Segment_Is_Land_Labels = isolate_sea_land_photons(
+            shoreline_data_path, ICESat2_GDF
+        )
+        ICESat2_GDF.loc[:, "is_land"] = Segment_Is_Land_Labels
 
         # Apply interpolations for required data
-        is_land_label_interp1d = apply_interpolation(interpolate_labels(segment_lat, Segment_Is_Land_Labels), lat_ph)
-        ph_ref_elev = apply_interpolation(interpolate_labels(segment_lat, ref_elev), lat_ph)
-        ph_ref_azimuth = apply_interpolation(interpolate_labels(segment_lat, ref_azimuth), lat_ph)
+        is_land_label_interp1d = apply_interpolation(
+            interpolate_labels(segment_lat, Segment_Is_Land_Labels), lat_ph
+        )
+        ph_ref_elev = apply_interpolation(
+            interpolate_labels(segment_lat, ref_elev), lat_ph
+        )
+        ph_ref_azimuth = apply_interpolation(
+            interpolate_labels(segment_lat, ref_azimuth), lat_ph
+        )
         ph_geoid = apply_interpolation(interpolate_labels(segment_lat, geoid), lat_ph)
 
-
-        # Create photon DataFrame for the current beam 
-        sea_photon_dataset = create_photon_dataframe(lat_ph=lat_ph, lon_ph=lon_ph,
-                                            ref_elev=ph_ref_elev,ref_azimuth=ph_ref_azimuth,
-                                            geoid=ph_geoid,h_ph=h_ph,
-                                              quality_ph=quality_ph,
-                                              is_land_label_interp1d=is_land_label_interp1d,
-                                              signal_conf_photon=signal_conf_photon,
-                                              x_atc=x_atc,  # Note: x_atc is not used in the function. Remove if unnecessary.
-                                              relative_AT_dist=relative_AT_dist,
-                                              solar_elevation=photon_solar_elevation,
-                                              background_rate=photon_background_rate)
+        # Create photon DataFrame for the current beam
+        sea_photon_dataset = create_photon_dataframe(
+            lat_ph=lat_ph,
+            lon_ph=lon_ph,
+            ref_elev=ph_ref_elev,
+            ref_azimuth=ph_ref_azimuth,
+            geoid=ph_geoid,
+            h_ph=h_ph,
+            quality_ph=quality_ph,
+            is_land_label_interp1d=is_land_label_interp1d,
+            signal_conf_photon=signal_conf_photon,
+            x_atc=x_atc,  # Note: x_atc is not used in the function. Remove if unnecessary.
+            relative_AT_dist=relative_AT_dist,
+            solar_elevation=photon_solar_elevation,
+            background_rate=photon_background_rate,
+        )
 
         # Filter out land photons
-        sea_photon_dataset = sea_photon_dataset[sea_photon_dataset['is_land_label'] != 1]
-        
+        sea_photon_dataset = sea_photon_dataset[
+            sea_photon_dataset["is_land_label"] != 1
+        ]
+
         # Add a new column to indicate the beam ID
-        sea_photon_dataset['beam_id'] = gtx
-        
+        sea_photon_dataset["beam_id"] = gtx
+
         # Append the processed dataset for the current beam to the list
         beam_datasets.append(sea_photon_dataset)
-        
+
     # Concatenate all beam data into a single DataFrame
     all_beams_dataset = pd.concat(beam_datasets, ignore_index=True)
-    
+
     return all_beams_dataset
 
 
@@ -631,103 +693,116 @@ def filter_photon_dataset_by_hull_area(photon_dataset, hull_area_threshold=3000)
     Filters photon dataset based on ConvexHull area threshold and returns the filtered dataset,
     convex hull areas, and convex hull points.
     """
-    lat_bins_grouped = photon_dataset.groupby('lat_bins', observed=False)
+    lat_bins_grouped = photon_dataset.groupby("lat_bins", observed=False)
     filtered_dataset = photon_dataset.copy()
-    
+
     convex_hulls = {}
     convex_hull_areas = {}
-    
+
     for lat_bin, bin_data in lat_bins_grouped:
         if len(bin_data) >= 3:
-            points = bin_data[['lat', 'photon_height']].to_numpy()
+            points = bin_data[["lat", "photon_height"]].to_numpy()
             hull = ConvexHull(points)
             area = hull.volume
             convex_hull_areas[lat_bin] = area
-            
+
             # Store the ConvexHull points if area meets the threshold
             if area >= hull_area_threshold:
                 convex_hulls[lat_bin] = points[hull.vertices]
             else:
                 # Remove bins with hull area below the threshold
-                filtered_dataset = filtered_dataset[filtered_dataset['lat_bins'] != lat_bin]
-                
+                filtered_dataset = filtered_dataset[
+                    filtered_dataset["lat_bins"] != lat_bin
+                ]
+
     return filtered_dataset, convex_hull_areas, convex_hulls
 
 
-
-
-
-    
-
-
-
 ##########################
-##Discard Functions Below 
+##Discard Functions Below
 ##########################
 
 
-#  Extracts key information from filenames, 
+#  Extracts key information from filenames,
 #  which could include processed status, product ID, timestamps, identifiers, or metadata.
 def extract_file_params(file_path):
-    '''
+    """
     Example: input "processed_ATL06_20231115120000_20231115_001_12_data.h5"
-            Output: ('processed_', 'ATL06', '2023', '11', '15', '12', '00', '00', 
+            Output: ('processed_', 'ATL06', '2023', '11', '15', '12', '00', '00',
             '2023', '11', '15', '001', '12', '_data')
-    '''
+    """
     # Defines a regex pattern to match strings in the file path
-    rx = re.compile(r'(processed_)?(ATL\d{2})_(\d{4})(\d{2})(\d{2})(\d{2})'
-                    r'(\d{2})(\d{2})_(\d{4})(\d{2})(\d{2})_(\d{3})_(\d{2})(.*?).h5$')
+    rx = re.compile(
+        r"(processed_)?(ATL\d{2})_(\d{4})(\d{2})(\d{2})(\d{2})"
+        r"(\d{2})(\d{2})_(\d{4})(\d{2})(\d{2})_(\d{3})_(\d{2})(.*?).h5$"
+    )
     # Searches for all matches of the regex pattern in the given
     params = rx.findall(file_path).pop()
     return params
 
 
 def create_mask(binned_data, sea_surface_height, seafloor_height, threshold_height):
-    '''
+    """
     create a mask for filtering sea surface, sea floor, and threshold_height
-    '''
-    mask = (binned_data['height'] <= sea_surface_height) & \
-           (binned_data['height'] >= seafloor_height) & \
-           (binned_data['height'] >= threshold_height)
+    """
+    mask = (
+        (binned_data["height"] <= sea_surface_height)
+        & (binned_data["height"] >= seafloor_height)
+        & (binned_data["height"] >= threshold_height)
+    )
     return mask
 
 
-def generate_polygons_from_binned_data(lat, height, mask, lat_interval, height_interval):
-    '''
+def generate_polygons_from_binned_data(
+    lat, height, mask, lat_interval, height_interval
+):
+    """
     horizontal_vertical_bin_dataset
     Generate polygons for each bin after masking within a rectangle formed by height and latitude intervals
-    '''
+    """
     # Create latitude bins based on the specified interval
     lat_bins = np.arange(lat.min(), lat.max() + lat_interval, lat_interval)
-    
+
     # Create height bins within the range [-12, 2] based on the specified interval
     height_bins = np.arange(-12, 2 + height_interval, height_interval)
-    
+
     # Identify which bin each masked latitude and height value belongs to
     lat_bin_indices = np.digitize(lat[mask], lat_bins)
-    
+
     # Determine which height bin each masked point belongs to
     height_bin_indices = np.digitize(height[mask], height_bins)
-    
+
     # Combine latitude and height bin indices for each point
-    combined_bins = list(zip(lat_bin_indices, height_bin_indices))
-    
-    # Find unique bin combinations and count the number of points in each bin    
+    combined_bins = list(zip(lat_bin_indices, height_bin_indices, strict=False))
+
+    # Find unique bin combinations and count the number of points in each bin
     unique_bins, counts = np.unique(combined_bins, axis=0, return_counts=True)
-    
-    # Filter bins to include only those within valid index ranges   
-    valid_bins = [(bin[0], bin[1]) for bin in unique_bins if 1 <= bin[0] < len(lat_bins) and 1 <= bin[1] < len(height_bins)]
+
+    # Filter bins to include only those within valid index ranges
+    valid_bins = [
+        (bin[0], bin[1])
+        for bin in unique_bins
+        if 1 <= bin[0] < len(lat_bins) and 1 <= bin[1] < len(height_bins)
+    ]
 
     polygons = []
     for bin_lat, bin_height in valid_bins:
-        if bin_lat > 0 and bin_lat < len(lat_bins) and bin_height > 0 and bin_height < len(height_bins):
-            bin_points = np.array([(lat[mask][i], height[mask][i]) for i in range(sum(mask))
-                                   if lat_bin_indices[i] == bin_lat and height_bin_indices[i] == bin_height])
+        if (
+            bin_lat > 0
+            and bin_lat < len(lat_bins)
+            and bin_height > 0
+            and bin_height < len(height_bins)
+        ):
+            bin_points = np.array(
+                [
+                    (lat[mask][i], height[mask][i])
+                    for i in range(sum(mask))
+                    if lat_bin_indices[i] == bin_lat
+                    and height_bin_indices[i] == bin_height
+                ]
+            )
             if len(bin_points) > 2:
                 hull = ConvexHull(bin_points)
                 polygons.append(bin_points[hull.vertices])
 
     return lat_bins, height_bins, valid_bins, polygons
-
-
-    
