@@ -75,7 +75,7 @@ fallback_version = "unknown"
 ##### LINTING, FORMATTING, TYPING #####
 
 [tool.codespell]
-ignore-words-list = "aok"
+ignore-words-list = "aok, socio-economic"
 
 [tool.pyright]
 pythonVersion = "3.11"
