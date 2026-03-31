@@ -448,7 +448,7 @@ def get_args():
 
     # night vs daytime
 
-    # solar elevation detemine remove or not for solar background
+    # solar elevation determine remove or not for solar background
 
     # 1-2 hours
 

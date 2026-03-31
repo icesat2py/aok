@@ -343,7 +343,7 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         # bbox can be GeoDataFrame or GeoSeries | shapely Geometry, default None
         # Filter features by given bounding box, GeoSeries, GeoDataFrame or a shapely geometry.
         # engine str, 'fiona' or 'pyogrio'
-        # somtime it gives error if using fiona
+        # sometime it gives error if using fiona
         # land_polygon_gdf = gpd.read_file(shoreline_data_path, bbox=ICESat2_GDF, engine='fiona')
         land_polygon_gdf = gpd.read_file(
             shoreline_data_path, bbox=ICESat2_GDF, engine="pyogrio"
@@ -358,7 +358,7 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         # get land or not bool value
         land_loc = ICESat2_GDF.index.isin(pts_in_land.index)
 
-        # asigned them to new numpy array
+        # assigned them to new numpy array
         land_point_labels[land_loc] = 1
         land_point_labels[~land_loc] = 0
 
