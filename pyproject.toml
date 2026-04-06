@@ -47,9 +47,7 @@ py-modules = ["_aok_version"]
 ##### DEPENDENCIES #####
 
 [tool.setuptools.dynamic]
-dependencies = [
-  "numpy",
-]
+dependencies = {file = ["requirements.txt"]}
 
 [project.optional-dependencies]
 dev = [
@@ -69,7 +67,7 @@ exclude = ["*tests"]
 version_file = "_aok_version.py"
 version_file_template = 'version = "{version}"'
 local_scheme = "node-and-date"
-fallback_version = "unknown"
+fallback_version = "0.0.0"
 
 
 ##### LINTING, FORMATTING, TYPING #####

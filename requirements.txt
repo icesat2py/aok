@@ -1,0 +1,18 @@
+
+geopandas
+h5py
+
+# Need to confirm which of these remain dependencies
+hdbscan
+icepyx
+matplotlib
+netcdf4
+numpy
+pandas
+pyproj
+rasterio
+Rtree
+scikit_learn
+scipy
+Shapely
+utm
