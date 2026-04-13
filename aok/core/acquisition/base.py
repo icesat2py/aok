@@ -1,6 +1,7 @@
 # contains classes for data input objects and data output objects after aquisition from the cloud. 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 import pandas as pd
 
 OutputType = Literal["dataframe", "geodataframe", "files"]
@@ -48,7 +49,7 @@ class DataRequest:
     time_range: tuple[str, str] | None = None
     beams: list[str] | None = None
     output: OutputType = "dataframe"
-    download_dir: str # HANNAH check if properly specified
+    download_dir: Path | None = None # HANNAH check if properly specified
 
     need_atl03: bool = True
     need_atl24: bool = True
