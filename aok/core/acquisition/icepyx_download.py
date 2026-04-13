@@ -25,7 +25,7 @@ def test_query(request):
 
 def get_icepyx_data(request):
     """Placeholder for future icepyx acquisition logic."""
-     try:
+    try:
         import icepyx as ipx
     except ImportError as e:
         raise ImportError(
