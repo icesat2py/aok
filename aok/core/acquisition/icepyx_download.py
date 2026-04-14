@@ -16,14 +16,14 @@ def construct_query(request):
 
     raise NotImplementedError("construct_query exists but is not implemented yet.")
 
-def test_query(request):
+def check_query(request):
     """
 
     This will test if the data is available and will raise an error if it is not. 
     """
     raise NotImplementedError("test_query exists but is not implemented yet.")
 
-def get_icepyx_data(request):
+def get_icepyx_data(request) -> AcquisitionResult:
     """Placeholder for future icepyx acquisition logic."""
     try:
         import icepyx as ipx
@@ -33,7 +33,7 @@ def get_icepyx_data(request):
         ) from e
 
     # 1: construct query
-    # 2: test query
+    # 2: check query
     # 3: request data
 
 
