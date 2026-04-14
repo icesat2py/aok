@@ -41,31 +41,60 @@ def build_data_request(cli_args: Any = None, yaml_path: str | Path | None = None
     return _build_request_from_cli(cli_args)
 
 
+def _coerce_optional_path(value: str | Path | None) -> Path | None:
+    """Convert a provided path-like value to Path, or return None."""
+    if value is None:
+        return None
+
+    try:
+        return Path(value)
+    except TypeError as e:
+        raise TypeError(
+            "download_dir must be a path-like string, Path, or None."
+        ) from e
+
 def _build_request_from_yaml(yaml_path: str | Path) -> DataRequest:
     """Build a DataRequest from a YAML configuration file."""
     yaml_path = Path(yaml_path)
 
     with yaml_path.open("r") as f:
         config = yaml.safe_load(f) or {}
+    
+    kwargs = {
+        "spatial": config["spatial"],
+    }
 
-    return DataRequest(
-        spatial=config["spatial"],
-        date_range=config.get("date_range"),
-        time_range=config.get("time_range"),
-        beams=config.get("beams", []),
-        output=config.get("output", "dataframe"),
-        need_atl03=config.get("need_atl03", True),
-        need_atl24=config.get("need_atl24", False),
-        need_gebco=config.get("need_gebco", False),
-        need_jpl_temperature=config.get("need_jpl_temperature", False),
-        need_shoreline=config.get("need_shoreline", False),
-        version=config.get("version"),
-        filters=config.get("filters", {}),
-    )
+    optional_fields = [
+        "date_range",
+        "time_range",
+        "beams",
+        "output",
+        "need_atl03",
+        "need_atl24",
+        "need_gebco",
+        "need_shoreline",
+        "need_jpl_temperature",
+        "version_atl03",
+        "version_atl24",
+        "variables_atl03",
+        "variables_atl24",
+        "options",
+    ]
+
+    for field_name in optional_fields:
+        if field_name in config:
+            kwargs[field_name] = config[field_name]
+
+    if "download_dir" in config:
+        kwargs["download_dir"] = _coerce_optional_path(config["download_dir"])
+
+    return DataRequest(**kwargs)
 
 
 def _build_request_from_cli(cli_args: Any) -> DataRequest:
     """Build a DataRequest from parsed command-line arguments."""
+
+    """
     return DataRequest(
         spatial=cli_args.spatial,
         date_range=getattr(cli_args, "date_range", None),
@@ -80,3 +109,15 @@ def _build_request_from_cli(cli_args: Any) -> DataRequest:
         version=getattr(cli_args, "version", None),
         filters=getattr(cli_args, "filters", {}),
     )
+    """
+    '''
+
+    CLI_TO_REQUEST_FIELDS = {
+    # data paths
+    ""
+    "target_beams": "beams",
+    "atl24_file": "atl24_file",
+    }
+    '''
+
+    raise NotImplementedError("_build_request_from_cli exists but the logic is not fully implemented yet.")
