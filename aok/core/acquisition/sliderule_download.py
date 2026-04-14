@@ -47,7 +47,7 @@ def get_atl24_data(params): #-> statsistics, geodataframe
 
 
 
-def get_sliderule_data(request):
+def get_sliderule_data(request) -> AcquisitionResult:
     """Placeholder for future SlideRule acquisition logic."""
     from sliderule import sliderule, icesat2 #, io
 
