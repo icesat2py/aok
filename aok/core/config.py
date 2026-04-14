@@ -63,7 +63,7 @@
 # OutputPath='C:/Workstation/ICESat2_HLS/Kd_ComparisionPaper/Results/'
 
 import argparse
-
+from pathlib import Path
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -74,7 +74,7 @@ def get_args():
     parser.add_argument(
         "--workspace_path",
         type=str,
-        default="C:/Workstation/ICESat2_HLS/Kd_ComparisionPaper/",
+        default=".",
         help="Root path for all data processing.",
     )
 
