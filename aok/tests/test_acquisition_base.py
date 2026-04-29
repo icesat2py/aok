@@ -185,3 +185,27 @@ def test_build_atl03_params_adds_file_output(basic_request,
         "as_geo": True,
         "open_on_complete": True,
     }
+
+def test_build_atl03_params_adds_gebco(basic_request, tmp_path):
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.time_range = None
+    basic_request.download_dir = tmp_path
+    basic_request.beams = None
+    basic_request.variables_atl03 = None
+    basic_request.need_gebco = True
+
+    params = basic_request.build_atl03_params()
+
+    assert params["samples"] == {"gebco": {"asset": "gebco-s3"}}
+
+def test_build_atl03_params_does_not_add_gebco(basic_request, tmp_path):
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.time_range = None
+    basic_request.download_dir = tmp_path
+    basic_request.beams = None
+    basic_request.variables_atl03 = None
+    basic_request.need_gebco = False
+
+    params = basic_request.build_atl03_params()
+
+    assert "samples" not in params

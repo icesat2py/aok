@@ -6,7 +6,6 @@ import warnings
 from typing import Literal
 import pandas as pd
 import geopandas as gpd
-import icepyx as ipx
 from aok.core.kd_utils.data_processing import isolate_sea_land_photons
 
 OutputType = Literal["dataframe", "geodataframe", "files"]
@@ -97,8 +96,8 @@ class DataRequest:
         TODO:
         - validate that spatial extent is specified correctly
         - validate that time is specified correctly
-        - validate that download paths are coercible to paths
-        - validat that specification is correct for either a sliderule request or icepyx request
+        - validate that download paths are coercible to type Path
+        - validate that specification is correct for either a sliderule request or icepyx request
         
         '''
         return None
@@ -146,13 +145,15 @@ class DataRequest:
     def _sliderule_output_params(self, 
                                  geoparquet_name: str | Path |  None = None,
                                 ) -> dict[str, Any] | None:
-        """Build SlideRule output parameters.
+        """Build the parameter dictionary for sliderule output location.
 
     Parameters
     ----------
     geoparquet_name
-        Name of the output GeoParquet file. If None, a default filename is used.
-        This can be varied by the calling method depending on the data request. 
+        Name of the output GeoParquet file. If None, a default filename 
+        (kdOutputAsGeo.geoparquet) is used.
+        This can be varied by the calling method depending on the data 
+        request. 
     """
         if self.output is None:
             warnings.warn(
@@ -290,6 +291,12 @@ class DataRequest:
         # solar_elevation, # included by default
         '''
 
+        # Add optional call to gebco; 
+        # returns three columns gebco.fileid, gebco.time_ns
+        # and gebco.value
+        if self.need_gebco:
+            params["samples"] = {"gebco": {"asset": "gebco-s3"}}
+
         # Define user-sepcified output parameters
         
         if self.output is not None:
@@ -304,22 +311,6 @@ class DataRequest:
             params.update(self.variables_atl03)
             
         return params
-
-    def build_gebco_params(self) -> dict[str, Any]:
-        '''
-        Build parameters to download gebco via sliderule.
-
-        
-        Not implemented yet. Draft implementation is below.
-        '''
-        raise NotImplementedError("build_gebco_params exists but is not implemented yet.")
-        '''
-        # gebco plugin
-        if gebco_needed is not None:
-            params["samples"] = {"gebco": {"asset": "gebco-bathy"}}
-            
-        return params
-        '''    
         
     def build_atl24_params(self) -> dict[str, Any]:
         t0, t1 = self._sliderule_time_range()
@@ -348,7 +339,7 @@ class DataRequest:
         from sliderule import icesat2
 
         params = self.build_atl03_params()
-        photons = icesat2.atl03sp(params)
+        photons = sliderule.run("atl03x",params)
 
         metadata = {
             "request_type": "atl03",
