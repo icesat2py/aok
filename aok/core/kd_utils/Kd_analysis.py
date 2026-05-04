@@ -612,9 +612,7 @@ def _fit_kd_with_method(
         )
         return kd, e0, nf
 
-    raise ValueError(
-        f"Unknown kd_fit_method: {method!r}. " f"Choose from {KD_FIT_METHODS}"
-    )
+    raise ValueError(f"Unknown kd_fit_method: {method!r}. Choose from {KD_FIT_METHODS}")
 
 
 # another solution is to calculate kd without hist
@@ -849,7 +847,7 @@ def calculate_kd(
         else:
             expected_nf_per_bin = None
             logging.info(
-                "Hybrid: insufficient noise floor estimates (%d), " "skipping pass 2",
+                "Hybrid: insufficient noise floor estimates (%d), skipping pass 2",
                 len(valid_nf_all),
             )
 
