@@ -643,7 +643,7 @@ def Extract_sea_photons(IS2_atl03_mds, # dictionary from .read_granule()
     Segment_Lat = {}
     Segment_Elev = {}
     Segment_Time = {}
-    Segment_ref_elev = {}
+    Segment_ref_elev = {} # not used again?
     Segment_ref_azimuth = {}
     background_rate = {}
     background_counts = {}
@@ -681,7 +681,8 @@ def Extract_sea_photons(IS2_atl03_mds, # dictionary from .read_granule()
         y_atc = IS2_val["heights"]["dist_ph_across"][:].copy()
         quality_ph = IS2_val["heights"]["quality_ph"]
 
-        # Optional variables for solar background sensitivity testing
+        # Optional variables for solar background sensitivity testing 
+        # interpolate from segment on dataframe
         photon_solar_elevation = np.full_like(photon_delta_time, np.nan, dtype=float)
         photon_background_rate = np.full_like(photon_delta_time, np.nan, dtype=float)
         if "solar_elevation" in IS2_val["geolocation"]:
@@ -709,7 +710,7 @@ def Extract_sea_photons(IS2_atl03_mds, # dictionary from .read_granule()
             x_atc[idx : idx + cnt] += Equator_Segment_Distance[gtx][seg_index]
 
         # Calculate relative distances
-        relative_AT_dist = (x_atc - x_atc[0]) / 1000
+        relative_AT_dist = (x_atc - x_atc[0]) / 1000 # why divided by 1000? conversion of units?
         relative_seg_dist = (
             Equator_Segment_Distance[gtx] - Equator_Segment_Distance[gtx][0]
         ) / 1000
