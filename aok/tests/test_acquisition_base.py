@@ -140,6 +140,7 @@ def test_build_atl03_params_basic(basic_request):
     assert params["t1"] == "2018-10-26T23:59:59Z"
     assert params["srt"] == [0, 1, 2, 3, 4]
     assert params["cnf"] == [-2, -1, 0, 1, 2, 3, 4]
+    assert params["quality_ph"] == [0]
 
     assert params["atl03_ph_fields"] == [
         "h_ph",
@@ -166,6 +167,13 @@ def test_build_atl03_params_basic(basic_request):
     assert params["atl03_cor_fields"] == [
         "geoid",
     ]
+    assert params["atl09_fields"] ==  [
+        "bckgrd_atlas/bckgrd_counts", 
+        "bckgrd_atlas/bckgrd_counts_reduced",
+        "bckgrd_atlas/bckgrd_rate",
+    ]
+
+    
     assert "output" not in params
     
 def test_build_atl03_params_adds_file_output(basic_request, 

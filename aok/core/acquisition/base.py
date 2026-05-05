@@ -233,7 +233,8 @@ class DataRequest:
             "t0": t0, # from time range convert function
             "t1": t1, # from time range convert function
             "srt": [0, 1, 2, 3, 4], # -1 for atl24 data; surface type for atl03
-            "cnf": [-2, -1, 0, 1, 2, 3, 4],
+            "cnf": [0, 1, 2, 3, 4],
+            "quality_ph": [0],
         }
 
         ## Now adding required auxillary fields
@@ -271,15 +272,21 @@ class DataRequest:
         
         atl03_bckgrd_atlas = {
             "atl03_bckgrd_fields": [ # used to calculate photon_background rate. 
-                "bckgrd_rate", 
+                "bckgrd_rate", # want bckgrd rate flag to false (no atmosphere flag)
                 #"delta_time", # called "bckgrd_time"; cannot call multiple delta times 
-            ]
+            ],
         }
         params.update(atl03_bckgrd_atlas)
 
         atl03_geophys_corr = { "atl03_cor_fields": ["geoid"],} # height above WGS-84 ref ellipsoid
+        
         params.update(atl03_geophys_corr)
         
+        params["atl09_fields"] = [
+                "bckgrd_atlas/bckgrd_counts", 
+                "bckgrd_atlas/bckgrd_counts_reduced",
+                "bckgrd_atlas/bckgrd_rate",
+            ]
 
         # auxillary param notes:
         '''
