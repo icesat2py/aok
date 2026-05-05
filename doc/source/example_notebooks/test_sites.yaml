@@ -1,0 +1,77 @@
+locations:
+  - name: chesapeake_bay
+    RGT: null
+    filename: ATL03_20230825074121_10102002_006_02.h5
+    dates:
+      start: "2018-10-22"
+      end: "2018-10-26"
+    spatial_extent:
+      bbox: [-77.54, 36.66, -74.58, 39.63]
+      latlon: [null, null]
+      buffer: 0.0
+
+  - name: us_oregon
+    RGT: null
+    filename: ATL03_20181206092124_10500106_005_01.h5
+    dates:
+      start: null
+      end: null
+    spatial_extent:
+      bbox: [null, null, null, null]
+      latlon: [null, null]
+      buffer: 0.0
+
+  - name: south_america
+    RGT: null
+    filename: ATL03_20220530041141_10391513_005_02.h5
+    dates:
+      start: null
+      end: null
+    spatial_extent:
+      bbox: [null, null, null, null]
+      latlon: [null, null]
+      buffer: 0.0
+
+  - name: alaska_cook_inlet
+    RGT: null
+    filename: ATL03_20210801125753_05941205_005_01.h5
+    dates:
+      start: null
+      end: null
+    spatial_extent:
+      bbox: [null, null, null, null]
+      latlon: [null, null]
+      buffer: 0.0
+
+  - name: hawaii
+    RGT: null
+    filename: ATL03_20220122044818_04721407_006_01.h5
+    dates:
+      start: null
+      end: null
+    spatial_extent:
+      bbox: [null, null, null, null]
+      latlon: [null, null]
+      buffer: 0.0
+
+  - name: india
+    RGT: null
+    filename: ATL03_20200331204156_00810707_006_01.h5
+    dates:
+      start: null
+      end: null
+    spatial_extent:
+      bbox: [null, null, null, null]
+      latlon: [null, null]
+      buffer: 0.0
+
+  - name: china_bohai
+    RGT: null
+    filename: ATL03_20191128115256_09560502_006_01.h5
+    dates:
+      start: null
+      end: null
+    spatial_extent:
+      bbox: [null, null, null, null]
+      latlon: [null, null]
+      buffer: 0.0
