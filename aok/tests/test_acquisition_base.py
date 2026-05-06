@@ -43,6 +43,7 @@ def test_data_request_defaults():
     assert req.variables_atl03 is None
     assert req.variables_atl24 is None
     assert req.options == {}
+    assert req.photons is None
 
 
 """
@@ -140,7 +141,7 @@ def test_build_atl03_params_basic(basic_request):
     assert params["t0"] == "2018-10-22T00:00:00Z"
     assert params["t1"] == "2018-10-26T23:59:59Z"
     assert params["srt"] == [0, 1, 2, 3, 4]
-    assert params["cnf"] == [-2, -1, 0, 1, 2, 3, 4]
+    assert params["cnf"] == [0, 1, 2, 3, 4]
     assert params["quality_ph"] == [0]
 
     assert params["atl03_ph_fields"] == [
