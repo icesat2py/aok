@@ -5,12 +5,15 @@ a user-supplied file (yml, at the moement).
 
 from pathlib import Path
 from typing import Any
+
 import yaml
 
 from .base import DataRequest
 
 
-def build_data_request(cli_args: Any = None, yaml_path: str | Path | None = None) -> DataRequest:
+def build_data_request(
+    cli_args: Any = None, yaml_path: str | Path | None = None
+) -> DataRequest:
     """
     Build a DataRequest from either command-line arguments or a YAML file.
 
@@ -32,7 +35,9 @@ def build_data_request(cli_args: Any = None, yaml_path: str | Path | None = None
         If neither or both input sources are provided, or if required fields
         are missing.
     """
-    if (cli_args is None and yaml_path is None) or (cli_args is not None and yaml_path is not None):
+    if (cli_args is None and yaml_path is None) or (
+        cli_args is not None and yaml_path is not None
+    ):
         raise ValueError("Provide exactly one of cli_args or yaml_path.")
 
     if yaml_path is not None:
@@ -53,13 +58,14 @@ def _coerce_optional_path(value: str | Path | None) -> Path | None:
             "download_dir must be a path-like string, Path, or None."
         ) from e
 
+
 def _build_request_from_yaml(yaml_path: str | Path) -> DataRequest:
     """Build a DataRequest from a YAML configuration file."""
     yaml_path = Path(yaml_path)
 
     with yaml_path.open("r") as f:
         config = yaml.safe_load(f) or {}
-    
+
     kwargs = {
         "spatial": config["spatial"],
     }
@@ -110,7 +116,7 @@ def _build_request_from_cli(cli_args: Any) -> DataRequest:
         filters=getattr(cli_args, "filters", {}),
     )
     """
-    '''
+    """
 
     CLI_TO_REQUEST_FIELDS = {
     # data paths
@@ -118,6 +124,8 @@ def _build_request_from_cli(cli_args: Any) -> DataRequest:
     "target_beams": "beams",
     "atl24_file": "atl24_file",
     }
-    '''
+    """
 
-    raise NotImplementedError("_build_request_from_cli exists but the logic is not fully implemented yet.")
+    raise NotImplementedError(
+        "_build_request_from_cli exists but the logic is not fully implemented yet."
+    )

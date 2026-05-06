@@ -136,7 +136,9 @@ def run_pipeline(args):
     gebco_pattern = os.path.join(gebco_full_path, "gebco_*.tif")
     gebco_file_path_lists = [p for p in glob.glob(gebco_pattern)]
 
-    is2_mds, is2_attrs, is2_beams = load_data(atl03_h5_file_path, False) # wrapper around read_granule()
+    is2_mds, is2_attrs, is2_beams = load_data(
+        atl03_h5_file_path, False
+    )  # wrapper around read_granule()
     target_strong_beams = get_target_beams(is2_beams, is2_attrs, args.target_beams)
     if not target_strong_beams:
         logger.error(
