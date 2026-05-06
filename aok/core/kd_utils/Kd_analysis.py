@@ -2,11 +2,64 @@
 # updated to perform a linear fit in log-space, just like MATLAB's polyfitn(zdepth, y, 1) for a first-order polynomial.
 
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from sklearn.linear_model import LinearRegression
+
+# Suppress np.polyfit RankWarning once at module scope; BMA/hybrid hot path
+# fires ~1.6M polyfit calls per granule, so per-call warning overhead would
+# dominate. Pathological inputs (zero z-variance) are guarded upstream by
+# MIN_DEPTH_BINS_FOR_FIT and min_total_range_m gates.
+warnings.filterwarnings("ignore", message=".*Polyfit may be poorly conditioned.*")
+
+MIN_DEPTH_BINS_FOR_FIT = 6  # hybrid fitter requires at least this many non-zero bins
+
+
+def compute_physics_noise_floor(df, horizontal_res, iss_velocity, vertical_res=0.25):
+    """Compute expected noise floor per horizontal bin from ATL03 bckgrd_rate.
+
+    Background photons are distributed uniformly across the detector's
+    altimetric range window (bckgrd_int_height from ATL03).  The expected
+    noise per depth bin is:
+
+        expected_nf = median(bckgrd_rate) * dwell_time * (vertical_res / median(bckgrd_int_height))
+
+    This is a diagnostic/validation value — not used as a fitter constraint.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Subsurface photon dataset with 'lat_bins', 'background_rate',
+        and 'bckgrd_int_height'.
+    horizontal_res : float
+        Horizontal bin size in meters (e.g. 500).
+    iss_velocity : float
+        ISS ground velocity in m/s (e.g. 7000).
+    vertical_res : float
+        Depth bin height in meters (default 0.25).
+
+    Returns
+    -------
+    pd.Series
+        Indexed by lat_bins, values are expected noise floor (photon counts
+        per depth bin). NaN for bins with missing data.
+    """
+    if "background_rate" not in df.columns or "bckgrd_int_height" not in df.columns:
+        return pd.Series(dtype=float)
+
+    dwell_time = horizontal_res / iss_velocity
+
+    grouped = df.groupby("lat_bins", observed=False)
+    median_bg = grouped["background_rate"].median()
+    median_int_height = grouped["bckgrd_int_height"].median()
+
+    expected_nf = median_bg * dwell_time * (vertical_res / median_int_height)
+
+    return expected_nf
+
 
 # def log_model(z, kd, e0):
 #     return np.log(e0) - kd * z
@@ -301,7 +354,15 @@ def fit_beers_law_bg_subtract(hist_df, bg_fraction=0.2):
 # ---------------------------------------------------------------------------
 #  Strategy B: Breakpoint / segmented regression
 # ---------------------------------------------------------------------------
-def fit_beers_law_breakpoint(hist_df):
+def fit_beers_law_breakpoint(
+    hist_df,
+    min_breakpoint_depth=2.0,
+    min_decay_range_m=5.0,
+    min_decay_photons=30,
+    min_decay_bins=8,
+    min_total_photons=30,
+    min_total_range_m=5.0,
+):
     """
     Find the optimal breakpoint between exponential decay and noise floor,
     then fit Beer's Law only to the decay segment.
@@ -314,28 +375,69 @@ def fit_beers_law_breakpoint(hist_df):
     ----------
     hist_df : pd.DataFrame
         Columns: 'zdepth' (ascending from surface), 'photon_counts'.
+    min_breakpoint_depth : float
+        Minimum depth (m) below surface for a valid breakpoint. Default 2.0 m.
+    min_decay_range_m : float
+        Minimum span (m) covered by the decay segment. Prevents short noisy
+        decay fits in low-signal bins. Default 5.0 m.
+    min_decay_photons : int
+        Minimum number of photons that must lie within the decay segment.
+        Default 30.
+    min_decay_bins : int
+        Minimum number of non-empty histogram bins in the decay segment.
+        Default 8.
+    min_total_photons : int
+        Minimum total photons in the bin for the fit to be attempted at all.
+        Default 30.
+    min_total_range_m : float
+        Minimum total histogram span (m) for the fit to be attempted at all.
+        Default 5.0 m.
 
     Returns
     -------
-    tuple[float, float, float, float]
-        (kd, e0, breakpoint_depth, noise_floor).
+    tuple[float, float, float, float, str or None]
+        (kd, e0, breakpoint_depth, noise_floor, failure_reason).
+        failure_reason is None on success, otherwise a short string
+        explaining why Kd is NaN (e.g. 'too_few_bins', 'insufficient_photons').
     """
     df = hist_df.copy().sort_values("zdepth")
     df = df[df["photon_counts"] > 0].copy()
     if len(df) < 5:
-        return np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan, "too_few_bins"
+
+    # NEW: reject the entire bin if insufficient data for any meaningful fit.
+    total_photons = int(df["photon_counts"].sum())
+    total_range = df["zdepth"].max() - df["zdepth"].min()
+    if total_photons < min_total_photons:
+        return np.nan, np.nan, np.nan, np.nan, "insufficient_photons"
+    if total_range < min_total_range_m:
+        return np.nan, np.nan, np.nan, np.nan, "insufficient_range"
 
     df["log_counts"] = np.log(df["photon_counts"])
     depths = df["zdepth"].values
     log_counts = df["log_counts"].values
+    counts = df["photon_counts"].values
     n = len(depths)
 
     best_rss = np.inf
     best_bp_idx = None
 
-    # Try each candidate breakpoint (need >= 4 points in decay segment,
+    # Try each candidate breakpoint (need >= min_decay_bins in decay segment,
     # >= 1 in noise segment)
-    for bp_idx in range(4, n - 1):
+    for bp_idx in range(max(4, min_decay_bins), n - 1):
+        if depths[bp_idx] < min_breakpoint_depth:
+            continue
+
+        # NEW: decay zone must span at least min_decay_range_m meters
+        decay_range = depths[bp_idx - 1] - depths[0]
+        if decay_range < min_decay_range_m:
+            continue
+
+        # NEW: decay zone must contain at least min_decay_photons photons
+        decay_photons = int(counts[:bp_idx].sum())
+        if decay_photons < min_decay_photons:
+            continue
+
         # Decay segment: linear fit on bins 0..bp_idx-1
         z_decay = depths[:bp_idx].reshape(-1, 1)
         lc_decay = log_counts[:bp_idx]
@@ -354,7 +456,7 @@ def fit_beers_law_breakpoint(hist_df):
             best_bp_idx = bp_idx
 
     if best_bp_idx is None:
-        return np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan, "no_breakpoint_found"
 
     # Final fit on the decay segment
     z_decay = depths[:best_bp_idx].reshape(-1, 1)
@@ -368,8 +470,8 @@ def fit_beers_law_breakpoint(hist_df):
     noise_floor = float(np.exp(log_counts[best_bp_idx:].mean()))
 
     if kd < 0:
-        kd = np.nan
-    return kd, e0, breakpoint_depth, noise_floor
+        return np.nan, np.nan, np.nan, np.nan, "negative_slope"
+    return kd, e0, breakpoint_depth, noise_floor, None
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +486,14 @@ def fit_beers_law_nonlinear(hist_df):
     """
     Fit the physically correct model C(z) = A·exp(-Kd·z) + N directly
     to raw photon counts using nonlinear least-squares (no log transform).
+
+    Two-stage approach for robust convergence:
+      Stage 1: Run bg_subtract to get reliable (Kd, A, N) estimates.
+               The log-linear fit on noise-subtracted counts gives a good
+               Kd, and the noise floor from deep bins gives N.
+      Stage 2: Use Stage 1 results as initial guesses for the nonlinear fit,
+               with N constrained to [0, 3 * N_stage1].  This refines the
+               physically correct model starting from a good solution.
 
     Parameters
     ----------
@@ -402,25 +512,30 @@ def fit_beers_law_nonlinear(hist_df):
     if len(depths) < 5:
         return np.nan, np.nan, np.nan
 
-    # Initial guesses
-    A0 = float(counts.max())
-    N0 = float(np.median(counts[len(counts) * 3 // 4 :]))  # deepest 25%
-    # Quick log-linear Kd estimate for initial guess (ignore noise)
-    pos = counts > 0
-    if pos.sum() >= 2:
-        log_c = np.log(counts[pos])
-        z_pos = depths[pos]
-        kd0 = max(float(-(log_c[-1] - log_c[0]) / (z_pos[-1] - z_pos[0] + 1e-9)), 0.01)
-    else:
-        kd0 = 0.1
+    # Stage 1: bg_subtract for Kd and N estimates
+    kd_init, _, N_init = fit_beers_law_bg_subtract(hist_df)
 
+    if np.isnan(N_init) or N_init < 0:
+        N_init = float(np.median(counts[len(counts) * 3 // 4 :]))
+    if np.isnan(kd_init) or kd_init <= 0:
+        kd_init = 0.1
+
+    # A0 from actual data: surface count minus noise, extrapolated to z=0
+    # A = (counts[0] - N) / exp(-Kd * z[0])
+    A_init = max(float(counts[0] - N_init), 1.0) / max(
+        np.exp(-kd_init * depths[0]), 1e-6
+    )
+
+    N_upper = max(N_init * 3.0, 1.0)
+
+    # Stage 2: nonlinear refinement
     try:
         popt, _ = curve_fit(
             _beer_plus_noise,
             depths,
             counts,
-            p0=[A0, kd0, N0],
-            bounds=([0, 0, 0], [np.inf, np.inf, np.inf]),
+            p0=[A_init, kd_init, N_init],
+            bounds=([0, 0.001, 0], [np.inf, np.inf, N_upper]),
             maxfev=5000,
         )
         A_fit, kd_fit, N_fit = popt
@@ -428,7 +543,8 @@ def fit_beers_law_nonlinear(hist_df):
             kd_fit = np.nan
         return float(kd_fit), float(A_fit), float(N_fit)
     except (RuntimeError, ValueError):
-        return np.nan, np.nan, np.nan
+        # If nonlinear fails, return bg_subtract result
+        return kd_init, A_init, N_init
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +555,11 @@ def fit_beers_law_hybrid(
     min_breakpoint_depth=2.0,
     expected_noise_floor=None,
     noise_floor_tolerance=3.0,
+    min_decay_range_m=5.0,
+    min_decay_photons=30,
+    min_decay_bins=8,
+    min_total_photons=30,
+    min_total_range_m=5.0,
 ):
     """
     Two-stage approach matching the flowchart intent:
@@ -457,6 +578,10 @@ def fit_beers_law_hybrid(
         expected value are penalised.
       * Falls back to full log-linear if no valid breakpoint improves BIC
         over a single-line model.
+      * NEW: whole-bin rejection when insufficient total photons or total
+        range exist to support any meaningful fit.
+      * NEW: decay-zone constraints (minimum range, minimum photons, minimum
+        non-empty bins) prevent spurious high-Kd fits in low-signal bins.
 
     Parameters
     ----------
@@ -475,31 +600,59 @@ def fit_beers_law_hybrid(
         Factor controlling how far the candidate noise segment mean may
         deviate from ``expected_noise_floor`` before a penalty is applied.
         Default 3.0 (allow 3x variation).
+    min_decay_range_m : float
+        Minimum span (m) that the decay segment must cover. Prevents
+        short decay fits dominated by noise. Default 5.0 m.
+    min_decay_photons : int
+        Minimum number of photons that must lie within the decay segment.
+        Default 30.
+    min_decay_bins : int
+        Minimum number of non-empty histogram bins in the decay segment.
+        Default 8.
+    min_total_photons : int
+        Minimum total photons in the bin for the fit to be attempted at all.
+        Bins with fewer photons are rejected outright. Default 30.
+    min_total_range_m : float
+        Minimum total histogram span (m) for the fit to be attempted at all.
+        Bins with a narrower span are rejected outright. Default 5.0 m.
 
     Returns
     -------
-    tuple[float, float, float, float]
-        (kd, e0, breakpoint_depth, noise_floor).
+    tuple[float, float, float, float, str or None]
+        (kd, e0, breakpoint_depth, noise_floor, failure_reason).
         breakpoint_depth and noise_floor are np.nan if fallback to full fit.
+        failure_reason is None on success, otherwise a short string
+        explaining why Kd is NaN or the fit fell back
+        (e.g. 'too_few_bins', 'insufficient_photons',
+        'no_breakpoint_fallback', 'no_breakpoint_found').
     """
     df = hist_df.copy().sort_values("zdepth")
     df = df[df["photon_counts"] > 0].copy()
     n = len(df)
     if n < 6:
-        return np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan, "too_few_bins"
+
+    # NEW: Reject the entire bin if insufficient data for any meaningful fit.
+    # Returns (nan, nan, nan, nan, reason_string) — reason is used by quality
+    # flag system to explain why Kd is NaN.
+    total_photons = int(df["photon_counts"].sum())
+    total_range = df["zdepth"].max() - df["zdepth"].min()
+    if total_photons < min_total_photons:
+        return np.nan, np.nan, np.nan, np.nan, "insufficient_photons"
+    if total_range < min_total_range_m:
+        return np.nan, np.nan, np.nan, np.nan, "insufficient_range"
 
     df["log_counts"] = np.log(df["photon_counts"])
     depths = df["zdepth"].values
     log_counts = df["log_counts"].values
+    counts = df["photon_counts"].values
 
     # ------------------------------------------------------------------
     # Reference: BIC for a single-line model (no breakpoint)
     # ------------------------------------------------------------------
-    model_full = LinearRegression()
-    model_full.fit(depths.reshape(-1, 1), log_counts)
-    rss_full = float(
-        np.sum((model_full.predict(depths.reshape(-1, 1)) - log_counts) ** 2)
-    )
+    slope_full, intercept_full = np.polyfit(depths, log_counts, 1)
+    pred_full = slope_full * depths + intercept_full
+    rss_full = float(np.sum((pred_full - log_counts) ** 2))
     k_full = 2  # slope + intercept
     bic_full = n * np.log(rss_full / n + 1e-10) + k_full * np.log(n)
 
@@ -508,24 +661,34 @@ def fit_beers_law_hybrid(
     # ------------------------------------------------------------------
     best_bic = bic_full  # must beat the single-line model
     best_bp_idx = None
-    best_model = None
+    best_slope = None
+    best_intercept = None
 
-    for bp_idx in range(4, n - 1):
+    for bp_idx in range(max(4, min_decay_bins), n - 1):
         # -- Minimum breakpoint depth constraint --
         if depths[bp_idx] < min_breakpoint_depth:
             continue
 
-        # -- Decay segment (surface to breakpoint) --
-        z_decay = depths[:bp_idx].reshape(-1, 1)
-        lc_decay = log_counts[:bp_idx]
-        model = LinearRegression()
-        model.fit(z_decay, lc_decay)
-
-        # Physical constraint: slope must be negative
-        if model.coef_[0] >= 0:
+        # NEW: decay zone must span at least min_decay_range_m meters
+        decay_range = depths[bp_idx - 1] - depths[0]
+        if decay_range < min_decay_range_m:
             continue
 
-        pred_decay = model.predict(z_decay)
+        # NEW: decay zone must contain at least min_decay_photons photons
+        decay_photons = int(counts[:bp_idx].sum())
+        if decay_photons < min_decay_photons:
+            continue
+
+        # -- Decay segment (surface to breakpoint) --
+        z_decay = depths[:bp_idx]
+        lc_decay = log_counts[:bp_idx]
+        slope, intercept = np.polyfit(z_decay, lc_decay, 1)
+
+        # Physical constraint: slope must be negative
+        if slope >= 0:
+            continue
+
+        pred_decay = slope * z_decay + intercept
         rss_decay = float(np.sum((pred_decay - lc_decay) ** 2))
 
         # -- Noise segment (breakpoint to bottom) --
@@ -551,66 +714,282 @@ def fit_beers_law_hybrid(
         if bic_bp < best_bic:
             best_bic = bic_bp
             best_bp_idx = bp_idx
-            best_model = model
+            best_slope = slope
+            best_intercept = intercept
 
     # ------------------------------------------------------------------
     # Result
     # ------------------------------------------------------------------
     if best_bp_idx is None:
         # No breakpoint beats the single-line model — fall back
-        kd = -model_full.coef_[0]
-        e0 = np.exp(model_full.intercept_)
+        kd = -slope_full
+        e0 = np.exp(intercept_full)
         if kd < 0:
-            kd = np.nan
-        return kd, e0, np.nan, np.nan
+            # Full fit also produces a non-physical slope; fitter cannot
+            # recover a Kd estimate from this bin.
+            return np.nan, np.nan, np.nan, np.nan, "no_breakpoint_found"
+        return kd, e0, np.nan, np.nan, "no_breakpoint_fallback"
 
-    kd = -best_model.coef_[0]
-    e0 = np.exp(best_model.intercept_)
+    kd = -best_slope
+    e0 = np.exp(best_intercept)
     breakpoint_depth = float(depths[best_bp_idx])
     noise_floor = float(np.exp(log_counts[best_bp_idx:].mean()))
 
     if kd < 0:
-        kd = np.nan
-    return kd, e0, breakpoint_depth, noise_floor
+        return np.nan, np.nan, np.nan, np.nan, "no_breakpoint_found"
+    return kd, e0, breakpoint_depth, noise_floor, None
+
+
+def fit_beers_law_bma(
+    hist_df,
+    min_breakpoint_depth=2.0,
+    expected_noise_floor=None,
+    noise_floor_tolerance=3.0,
+    min_decay_range_m=5.0,
+    min_decay_photons=30,
+    min_decay_bins=8,
+    min_total_photons=30,
+    min_total_range_m=5.0,
+):
+    """
+    Bayesian Model-Averaged Kd: weighted average across all candidate breakpoints.
+
+    Instead of picking the single best BIC breakpoint (which is unstable),
+    compute Kd for every candidate and weight by BIC probability:
+        w_i = exp(-0.5 * (BIC_i - BIC_min))
+        kd = sum(w_i * kd_i) / sum(w_i)
+
+    When BIC is confident (one clear winner), gives same result as hybrid.
+    When BIC is ambiguous, gives a smoothed, more stable Kd.
+
+    Parameters
+    ----------
+    hist_df : pd.DataFrame
+        Columns: 'zdepth' (ascending from surface), 'photon_counts'.
+    min_breakpoint_depth : float
+        Minimum depth (m) below surface for a valid breakpoint. Default 2.0 m.
+    expected_noise_floor : float or None
+        If provided, the beam-level median noise floor (photon counts).
+        Candidate breakpoints whose noise segment mean deviates by more
+        than ``noise_floor_tolerance`` times from the expected value
+        receive a BIC penalty.
+    noise_floor_tolerance : float
+        Factor controlling how far the candidate noise segment mean may
+        deviate from ``expected_noise_floor`` before a penalty is applied.
+        Default 3.0.
+    min_decay_range_m : float
+        Minimum span (m) that the decay segment must cover. Default 5.0 m.
+    min_decay_photons : int
+        Minimum number of photons in the decay segment. Default 30.
+    min_decay_bins : int
+        Minimum number of non-empty histogram bins in the decay segment.
+        Default 8.
+    min_total_photons : int
+        Minimum total photons for the fit to be attempted. Default 30.
+    min_total_range_m : float
+        Minimum total histogram span (m) for the fit to be attempted. Default 5.0.
+
+    Returns
+    -------
+    tuple[float, float, float, float, str or None]
+        (kd, e0, breakpoint_avg, noise_floor_avg, failure_reason).
+        Same signature as fit_beers_law_hybrid for drop-in replacement.
+    """
+    df = hist_df.copy().sort_values("zdepth")
+    df = df[df["photon_counts"] > 0].copy()
+    n = len(df)
+    if n < MIN_DEPTH_BINS_FOR_FIT:
+        return np.nan, np.nan, np.nan, np.nan, "too_few_bins"
+
+    # Whole-bin rejection: insufficient data for any meaningful fit.
+    total_photons = int(df["photon_counts"].sum())
+    total_range = df["zdepth"].max() - df["zdepth"].min()
+    if total_photons < min_total_photons:
+        return np.nan, np.nan, np.nan, np.nan, "insufficient_photons"
+    if total_range < min_total_range_m:
+        return np.nan, np.nan, np.nan, np.nan, "insufficient_range"
+
+    df["log_counts"] = np.log(df["photon_counts"])
+    depths = df["zdepth"].values
+    log_counts = df["log_counts"].values
+    counts = df["photon_counts"].values
+
+    # ------------------------------------------------------------------
+    # Full single-line model (no breakpoint) as baseline candidate
+    # ------------------------------------------------------------------
+    slope_full, intercept_full = np.polyfit(depths, log_counts, 1)
+    pred_full = slope_full * depths + intercept_full
+    rss_full = float(np.sum((pred_full - log_counts) ** 2))
+    k_full = 2  # slope + intercept
+    bic_full = n * np.log(rss_full / n + 1e-10) + k_full * np.log(n)
+    kd_full = -slope_full
+    e0_full = np.exp(intercept_full)
+
+    candidates = []
+
+    # Include the full-line model as a candidate (no breakpoint)
+    if kd_full > 0:
+        candidates.append(
+            {
+                "bic": bic_full,
+                "kd": kd_full,
+                "e0": e0_full,
+                "bp": np.nan,
+                "nf": np.nan,
+            }
+        )
+
+    # ------------------------------------------------------------------
+    # Breakpoint candidates: same search as hybrid
+    # ------------------------------------------------------------------
+    for bp_idx in range(max(4, min_decay_bins), n - 1):
+        if depths[bp_idx] < min_breakpoint_depth:
+            continue
+
+        # Decay zone must span at least min_decay_range_m meters
+        decay_range = depths[bp_idx - 1] - depths[0]
+        if decay_range < min_decay_range_m:
+            continue
+
+        # Decay zone must contain at least min_decay_photons photons
+        decay_photons = int(counts[:bp_idx].sum())
+        if decay_photons < min_decay_photons:
+            continue
+
+        # Fit linear decay on surface-to-breakpoint segment
+        z_decay = depths[:bp_idx]
+        lc_decay = log_counts[:bp_idx]
+        slope, intercept = np.polyfit(z_decay, lc_decay, 1)
+
+        # Physical constraint: slope must be negative (Kd > 0)
+        if slope >= 0:
+            continue
+
+        pred_decay = slope * z_decay + intercept
+        rss_decay = float(np.sum((pred_decay - lc_decay) ** 2))
+
+        # Noise segment (breakpoint to bottom)
+        lc_noise = log_counts[bp_idx:]
+        noise_mean = float(lc_noise.mean())
+        rss_noise = float(np.sum((lc_noise - noise_mean) ** 2))
+
+        # BIC for piecewise model (3 params: slope, intercept, noise level)
+        rss_total = rss_decay + rss_noise
+        k_bp = 3
+        bic_bp = n * np.log(rss_total / n + 1e-10) + k_bp * np.log(n)
+
+        # Noise floor consistency penalty (same as hybrid)
+        if expected_noise_floor is not None and expected_noise_floor > 0:
+            candidate_nf = float(np.exp(noise_mean))
+            ratio = candidate_nf / expected_noise_floor
+            if ratio > noise_floor_tolerance or ratio < 1.0 / noise_floor_tolerance:
+                bic_bp += n * abs(np.log(ratio))
+
+        candidates.append(
+            {
+                "bic": bic_bp,
+                "kd": -slope,
+                "e0": np.exp(intercept),
+                "bp": float(depths[bp_idx]),
+                "nf": float(np.exp(noise_mean)),
+            }
+        )
+
+    if not candidates:
+        return np.nan, np.nan, np.nan, np.nan, "no_valid_candidates"
+
+    # ------------------------------------------------------------------
+    # BIC weights: w_i = exp(-0.5 * (BIC_i - BIC_min)), normalised
+    # ------------------------------------------------------------------
+    cdf = pd.DataFrame(candidates)
+    bic_min = cdf["bic"].min()
+    cdf["weight"] = np.exp(-0.5 * (cdf["bic"] - bic_min))
+    cdf["weight"] /= cdf["weight"].sum()
+
+    kd_avg = float((cdf["weight"] * cdf["kd"]).sum())
+    e0_avg = float((cdf["weight"] * cdf["e0"]).sum())
+
+    # Weighted average breakpoint (excluding NaN for full-line model)
+    bp_valid = cdf.dropna(subset=["bp"])
+    if len(bp_valid) > 0 and bp_valid["weight"].sum() > 0.01:
+        bp_avg = float(
+            (bp_valid["weight"] * bp_valid["bp"]).sum() / bp_valid["weight"].sum()
+        )
+        nf_avg = float(
+            (bp_valid["weight"] * bp_valid["nf"]).sum() / bp_valid["weight"].sum()
+        )
+    else:
+        bp_avg = np.nan
+        nf_avg = np.nan
+
+    if kd_avg <= 0:
+        return np.nan, np.nan, np.nan, np.nan, "negative_kd"
+
+    return kd_avg, e0_avg, bp_avg, nf_avg, None
 
 
 # ---------------------------------------------------------------------------
 #  Dispatcher: select fitting strategy by name
 # ---------------------------------------------------------------------------
-KD_FIT_METHODS = ("log_linear", "bg_subtract", "breakpoint", "nonlinear", "hybrid")
+KD_FIT_METHODS = (
+    "log_linear",
+    "bg_subtract",
+    "breakpoint",
+    "nonlinear",
+    "hybrid",
+    "bma",
+)
 
 
 def _fit_kd_with_method(
-    hist_df, method="log_linear", decay_threshold=0.0, expected_noise_floor=None
+    hist_df,
+    method="log_linear",
+    decay_threshold=0.0,
+    expected_noise_floor=None,
+    **kwargs,
 ):
     """
     Run the requested fitting strategy on a single histogram.
 
+    Extra keyword arguments are forwarded to the underlying fitter (e.g.
+    ``min_decay_range_m``, ``min_decay_photons``, ``min_total_photons``,
+    ``min_total_range_m`` for the hybrid and breakpoint methods).
+
     Returns
     -------
-    tuple[float, float, float]
-        (kd, e0, noise_floor).  noise_floor is np.nan for log_linear.
+    tuple[float, float, float, str or None]
+        (kd, e0, noise_floor, failure_reason).  noise_floor is np.nan for
+        log_linear.  failure_reason is None for methods that do not report
+        one (log_linear, bg_subtract, nonlinear).
     """
     if method == "log_linear":
         valid = find_exponential_decay_zone(hist_df, decay_threshold=decay_threshold)
         kd, e0 = fit_beers_law(valid)
-        return kd, e0, np.nan
+        return kd, e0, np.nan, None
 
     if method == "bg_subtract":
-        return fit_beers_law_bg_subtract(hist_df)
+        kd, e0, nf = fit_beers_law_bg_subtract(hist_df)
+        return kd, e0, nf, None
 
     if method == "breakpoint":
-        kd, e0, bp, nf = fit_beers_law_breakpoint(hist_df)
-        return kd, e0, nf
+        kd, e0, _, nf, reason = fit_beers_law_breakpoint(hist_df, **kwargs)
+        return kd, e0, nf, reason
 
     if method == "nonlinear":
-        return fit_beers_law_nonlinear(hist_df)
+        kd, e0, nf = fit_beers_law_nonlinear(hist_df)
+        return kd, e0, nf, None
 
     if method == "hybrid":
-        kd, e0, bp, nf = fit_beers_law_hybrid(
-            hist_df, expected_noise_floor=expected_noise_floor
+        kd, e0, _, nf, reason = fit_beers_law_hybrid(
+            hist_df, expected_noise_floor=expected_noise_floor, **kwargs
         )
-        return kd, e0, nf
+        return kd, e0, nf, reason
+
+    if method == "bma":
+        kd, e0, _, nf, reason = fit_beers_law_bma(
+            hist_df, expected_noise_floor=expected_noise_floor, **kwargs
+        )
+        return kd, e0, nf, reason
 
     raise ValueError(f"Unknown kd_fit_method: {method!r}. Choose from {KD_FIT_METHODS}")
 
@@ -625,12 +1004,18 @@ def CalculateKdFromFilteredSubsurfacePhoton(
     surface_sigma=None,
     wave_exclusion_multiplier=0.0,
     wave_sigma_calm_threshold=0.1,
+    **fit_kwargs,
 ):
     """
     Calculate Kd for a single along-track bin by fitting Beer's Law in log-space.
 
     Orchestrates steps 16 and 17 by calling find_exponential_decay_zone and
     fit_beers_law in sequence.
+
+    Extra keyword arguments in ``fit_kwargs`` are forwarded to the underlying
+    fitter (hybrid/breakpoint constraint parameters such as
+    ``min_decay_range_m``, ``min_decay_photons``, ``min_decay_bins``,
+    ``min_total_photons``, ``min_total_range_m``).
 
     Flowchart steps:
       16 — find_exponential_decay_zone: determine depth range of exponential decay.
@@ -647,6 +1032,7 @@ def CalculateKdFromFilteredSubsurfacePhoton(
                 "surface_sigma": [np.nan],
                 "latitude": [np.nan],
                 "longitude": [np.nan],
+                "fit_failure_reason": [None],
             }
         )
 
@@ -706,11 +1092,12 @@ def CalculateKdFromFilteredSubsurfacePhoton(
                 hist_df = trimmed
             # else: keep original hist_df (too few bins after trim)
 
-    kd, e0, noise_floor = _fit_kd_with_method(
+    kd, e0, noise_floor, fit_failure_reason = _fit_kd_with_method(
         hist_df,
         method=kd_fit_method,
         decay_threshold=decay_zone_threshold,
         expected_noise_floor=expected_noise_floor,
+        **fit_kwargs,
     )
 
     return pd.DataFrame(
@@ -722,6 +1109,7 @@ def CalculateKdFromFilteredSubsurfacePhoton(
             "surface_sigma": [surface_sigma if surface_sigma is not None else np.nan],
             "latitude": [latitude],
             "longitude": [longitude],
+            "fit_failure_reason": [fit_failure_reason],
         }
     )
 
@@ -733,6 +1121,7 @@ def calculate_kd(
     kd_fit_method="log_linear",
     wave_exclusion_multiplier=0.0,
     wave_sigma_calm_threshold=0.1,
+    **fit_kwargs,
 ):
     """
     Loop over along-track bins and call CalculateKdFromFilteredSubsurfacePhoton
@@ -745,6 +1134,10 @@ def calculate_kd(
 
     After fitting, IQR-based outlier filtering removes extreme Kd values
     (for hybrid method only).
+
+    Extra keyword arguments in ``fit_kwargs`` (e.g. ``min_decay_range_m``,
+    ``min_decay_photons``, ``min_total_photons``) are forwarded to the
+    underlying fitter to tune the data-sufficiency constraints.
 
     Flowchart steps:
       16 — Determine depth of exponential decay zone (per bin, inside
@@ -767,6 +1160,7 @@ def calculate_kd(
             "surface_sigma": [],
             "latitude": [],
             "longitude": [],
+            "fit_failure_reason": [],
         }
     )
 
@@ -796,6 +1190,7 @@ def calculate_kd(
                     surface_sigma=sigma,
                     wave_exclusion_multiplier=wave_exclusion_multiplier,
                     wave_sigma_calm_threshold=wave_sigma_calm_threshold,
+                    **fit_kwargs,
                 )
             )
         if not pass1_results:
@@ -805,17 +1200,12 @@ def calculate_kd(
         # ------------------------------------------------------------------
         # Compute sliding-window noise floor for pass 2
         # ------------------------------------------------------------------
-        # 10 km window = ±10 bins at 500 m resolution (20 bins total).
-        # Each bin's expected noise floor = median of valid noise floors
-        # within ±half_window bins.  Falls back to beam-level median when
-        # the local window has < 3 valid estimates.
-        HALF_WINDOW = 10  # ±10 bins = ±5 km at 500 m horizontal_res
-        MIN_LOCAL = 3  # minimum valid noise floors to use local median
+        HALF_WINDOW = 10
+        MIN_LOCAL = 3
 
         nf_array = pass1_df["noise_floor"].values.copy()
         n_bins = len(nf_array)
 
-        # Beam-level fallback
         valid_nf_all = pass1_df["noise_floor"].dropna()
         valid_nf_all = valid_nf_all[valid_nf_all > 0]
         beam_median_nf = (
@@ -823,7 +1213,6 @@ def calculate_kd(
         )
 
         if beam_median_nf is not None:
-            # Build per-bin expected noise floor via sliding window
             expected_nf_per_bin = np.full(n_bins, np.nan)
             for i in range(n_bins):
                 lo = max(0, i - HALF_WINDOW)
@@ -833,7 +1222,7 @@ def calculate_kd(
                 if len(valid) >= MIN_LOCAL:
                     expected_nf_per_bin[i] = float(np.median(valid))
                 else:
-                    expected_nf_per_bin[i] = beam_median_nf  # fallback
+                    expected_nf_per_bin[i] = beam_median_nf
 
             logging.info(
                 "Hybrid pass 2: sliding window noise floor "
@@ -871,6 +1260,7 @@ def calculate_kd(
                         surface_sigma=sigma,
                         wave_exclusion_multiplier=wave_exclusion_multiplier,
                         wave_sigma_calm_threshold=wave_sigma_calm_threshold,
+                        **fit_kwargs,
                     )
                 )
             SubsurfacePhotonDFAddedKd = pd.concat(results, ignore_index=True)
@@ -923,6 +1313,7 @@ def calculate_kd(
                     surface_sigma=sigma,
                     wave_exclusion_multiplier=wave_exclusion_multiplier,
                     wave_sigma_calm_threshold=wave_sigma_calm_threshold,
+                    **fit_kwargs,
                 )
             )
         if not results:
@@ -939,10 +1330,15 @@ def process_kd_calculation(
     kd_fit_method="log_linear",
     wave_exclusion_multiplier=0.0,
     wave_sigma_calm_threshold=0.1,
+    **fit_kwargs,
 ):
     """
     Beam-by-beam wrapper that calls calculate_kd for every beam and concatenates
     the results into a single Kd output DataFrame.
+
+    Extra keyword arguments in ``fit_kwargs`` (e.g. ``min_decay_range_m``,
+    ``min_decay_photons``, ``min_total_photons``) are forwarded to the
+    underlying fitter via ``calculate_kd``.
 
     Flowchart steps:
       16 — Determine depth of exponential decay zone (delegated to
@@ -968,6 +1364,7 @@ def process_kd_calculation(
             kd_fit_method=kd_fit_method,
             wave_exclusion_multiplier=wave_exclusion_multiplier,
             wave_sigma_calm_threshold=wave_sigma_calm_threshold,
+            **fit_kwargs,
         )
 
         # Add a column to track the beam_id in the results
@@ -991,11 +1388,372 @@ def process_kd_calculation(
                 "surface_sigma",
                 "latitude",
                 "longitude",
+                "fit_failure_reason",
                 "beam_id",
             ]
         )
 
     # Combine results from all beams into a single DataFrame
     combined_kd_dataset = pd.concat(kd_beam_datasets, ignore_index=True)
-
     return combined_kd_dataset
+
+
+def bootstrap_kd_for_bin_loglinear(
+    photon_heights, n_boot=500, vertical_res=0.25, rng=None
+):
+    """
+    Legacy log-linear residual bootstrap (kept for reference).
+
+    Build the depth histogram, fit log-linear Beer's Law to get baseline Kd,
+    compute residuals, and resample residuals N times to get a distribution
+    of bootstrap Kd values. Reports std + 95% CI.
+
+    This does NOT capture BIC breakpoint uncertainty. Use ``bootstrap_kd_for_bin``
+    for the hybrid-method bootstrap that re-runs the full fit (BIC breakpoint +
+    log-linear decay fit) on every bootstrap iteration.
+
+    Parameters
+    ----------
+    photon_heights : np.ndarray
+        Photon heights (negative below surface) for one along-track bin.
+    n_boot : int
+        Number of bootstrap iterations.
+    vertical_res : float
+        Depth bin width (m).
+    rng : np.random.Generator or None
+        Random number generator for reproducibility.
+
+    Returns
+    -------
+    dict with keys: kd_baseline, kd_std, kd_ci_low, kd_ci_high, n_boot_success
+        All values are NaN if the fit cannot be performed (insufficient data).
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    nan_result = {
+        "kd_baseline": np.nan,
+        "kd_std": np.nan,
+        "kd_ci_low": np.nan,
+        "kd_ci_high": np.nan,
+        "n_boot_success": 0,
+    }
+
+    if len(photon_heights) < 20:
+        return nan_result
+
+    h_min, h_max = float(np.min(photon_heights)), float(np.max(photon_heights))
+    if h_max <= h_min:
+        return nan_result
+
+    bin_edges = np.arange(h_min, h_max + vertical_res, vertical_res)
+    counts, edges = np.histogram(photon_heights, bins=bin_edges)
+    bin_centers = (edges[:-1] + edges[1:]) / 2.0
+    mask = counts > 0
+    if mask.sum() < 4:
+        return nan_result
+
+    counts_used = counts[mask]
+    bin_centers_used = bin_centers[mask]
+    # zdepth convention: 0 at surface-most bin, increasing downward
+    zdepth = bin_centers_used.max() - bin_centers_used
+    log_counts = np.log(counts_used.astype(float))
+
+    # Baseline log-linear fit
+    model = LinearRegression()
+    model.fit(zdepth.reshape(-1, 1), log_counts)
+    kd_base = -float(model.coef_[0])
+    fitted = model.predict(zdepth.reshape(-1, 1)).flatten()
+    residuals = log_counts - fitted
+
+    if kd_base < 0 or np.isnan(kd_base):
+        return {**nan_result, "kd_baseline": kd_base}
+
+    # Residual bootstrap
+    boot_kds = []
+    n_points = len(residuals)
+    for _ in range(n_boot):
+        boot_resid = rng.choice(residuals, size=n_points, replace=True)
+        boot_log = fitted + boot_resid
+        m = LinearRegression().fit(zdepth.reshape(-1, 1), boot_log)
+        kd_b = -float(m.coef_[0])
+        if not np.isnan(kd_b) and kd_b > 0:
+            boot_kds.append(kd_b)
+
+    if len(boot_kds) < n_boot * 0.5:
+        return {**nan_result, "kd_baseline": kd_base, "n_boot_success": len(boot_kds)}
+
+    boot_kds = np.asarray(boot_kds)
+    return {
+        "kd_baseline": kd_base,
+        "kd_std": float(np.std(boot_kds)),
+        "kd_ci_low": float(np.percentile(boot_kds, 2.5)),
+        "kd_ci_high": float(np.percentile(boot_kds, 97.5)),
+        "n_boot_success": len(boot_kds),
+    }
+
+
+def bootstrap_kd_for_bin(
+    photon_heights,
+    n_boot=300,
+    vertical_res=0.25,
+    rng=None,
+    fit_method="bma",
+    min_decay_range_m=5.0,
+    min_decay_photons=30,
+    min_decay_bins=8,
+    min_total_photons=30,
+    min_total_range_m=5.0,
+):
+    """
+    Residual bootstrap for single-bin Kd uncertainty.
+
+    Each bootstrap iteration re-runs the fit procedure (BIC breakpoint
+    search + log-linear fit on decay segment), capturing BOTH slope uncertainty
+    AND breakpoint-location uncertainty.
+
+    Procedure:
+      1. Build depth histogram from photons in the bin.
+      2. Run fit on the original histogram to get baseline kd, breakpoint,
+         e0, and noise floor.
+      3. Compute residuals for each depth bin (log_counts - fitted_value), where
+         the fitted value is the log-linear slope for the decay segment and
+         log(noise_floor) for the noise segment (if a breakpoint was found).
+      4. For each of N bootstrap iterations:
+         a. Resample residuals with replacement.
+         b. Add resampled residuals to fitted values to produce bootstrap log counts.
+         c. Run the fit on the bootstrap histogram to get bootstrap kd
+            and bp.
+      5. Report kd_std (std of bootstrap kds) + 95% CI, plus bp_std (std of
+         bootstrap breakpoints when available).
+
+    Parameters
+    ----------
+    photon_heights : np.ndarray
+        Photon heights (negative below surface) for one along-track bin.
+    n_boot : int
+        Number of bootstrap iterations. Default 300.
+    vertical_res : float
+        Depth bin width (m). Default 0.25.
+    rng : np.random.Generator or None
+        Random number generator for reproducibility.
+    fit_method : str
+        Fitting method to use for baseline and bootstrap iterations.
+        'bma' (default) or 'hybrid'.
+    min_decay_range_m, min_decay_photons, min_decay_bins, min_total_photons,
+    min_total_range_m : forwarded to the fit function.
+
+    Returns
+    -------
+    dict with keys: kd_baseline, kd_std, kd_ci_low, kd_ci_high,
+        n_boot_success, bp_std. All values are NaN if the fit cannot be
+        performed (insufficient data, or the bin is rejected by the
+        fit constraints).
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    nan_result = {
+        "kd_baseline": np.nan,
+        "kd_std": np.nan,
+        "kd_ci_low": np.nan,
+        "kd_ci_high": np.nan,
+        "n_boot_success": 0,
+        "bp_std": np.nan,
+    }
+
+    if len(photon_heights) == 0:
+        return nan_result
+
+    h_min = float(np.min(photon_heights))
+    h_max = float(np.max(photon_heights))
+    if h_max <= h_min:
+        return nan_result
+
+    bin_edges = np.arange(h_min, h_max + vertical_res, vertical_res)
+    counts, edges = np.histogram(photon_heights, bins=bin_edges)
+    bin_centers = (edges[:-1] + edges[1:]) / 2.0
+    # zdepth convention: 0 at surface-most bin, increasing downward
+    zdepth_all = bin_centers.max() - bin_centers
+    hist = pd.DataFrame({"zdepth": zdepth_all, "photon_counts": counts})
+
+    if len(hist) < 6:
+        return nan_result
+
+    # Select fit function based on method
+    fit_kwargs = dict(
+        min_decay_range_m=min_decay_range_m,
+        min_decay_photons=min_decay_photons,
+        min_decay_bins=min_decay_bins,
+        min_total_photons=min_total_photons,
+        min_total_range_m=min_total_range_m,
+    )
+    if fit_method == "bma":
+        fit_func = fit_beers_law_bma
+    else:
+        fit_func = fit_beers_law_hybrid
+
+    # Baseline fit
+    kd_base, e0_base, bp_base, nf_base, reason = fit_func(
+        hist,
+        **fit_kwargs,
+    )
+
+    if np.isnan(kd_base) or reason is not None:
+        # Bin rejected by hybrid constraints — no uncertainty to report.
+        return {**nan_result, "kd_baseline": kd_base}
+
+    # Build residuals from the baseline fit on non-empty bins.
+    df = (
+        hist[hist["photon_counts"] > 0]
+        .copy()
+        .sort_values("zdepth")
+        .reset_index(drop=True)
+    )
+    df["log_counts"] = np.log(df["photon_counts"].astype(float))
+
+    if not np.isnan(bp_base):
+        # Two-segment model: linear decay + constant noise floor.
+        decay_mask = df["zdepth"] < bp_base
+        noise_mask = ~decay_mask
+
+        fitted = np.empty(len(df))
+        # Decay: log_counts ~ log(e0) - kd*zdepth
+        fitted[decay_mask.values] = (
+            np.log(e0_base) - kd_base * df.loc[decay_mask, "zdepth"].values
+        )
+        # Noise segment: constant log(noise_floor) (fallback to empirical mean).
+        if not np.isnan(nf_base) and nf_base > 0:
+            fitted[noise_mask.values] = np.log(nf_base)
+        else:
+            fitted[noise_mask.values] = (
+                df.loc[noise_mask, "log_counts"].mean() if noise_mask.any() else 0.0
+            )
+    else:
+        # Full-line fallback (no breakpoint selected).
+        fitted = np.log(e0_base) - kd_base * df["zdepth"].values
+
+    residuals = df["log_counts"].values - fitted
+    zdepth_fit = df["zdepth"].values
+
+    # Bootstrap: resample residuals, add to fitted, re-run fit.
+    boot_kds = []
+    boot_bps = []
+    for _ in range(n_boot):
+        boot_resid = rng.choice(residuals, size=len(residuals), replace=True)
+        boot_log = fitted + boot_resid
+        boot_counts = np.exp(boot_log)
+        # Clip to avoid zero or negative counts; histogram fit uses log.
+        boot_counts = np.clip(boot_counts, 0.5, None)
+        boot_hist = pd.DataFrame({"zdepth": zdepth_fit, "photon_counts": boot_counts})
+        kd_b, _e0_b, bp_b, _nf_b, _reason_b = fit_func(
+            boot_hist,
+            **fit_kwargs,
+        )
+        if not np.isnan(kd_b) and kd_b > 0:
+            boot_kds.append(kd_b)
+            if not np.isnan(bp_b):
+                boot_bps.append(bp_b)
+
+    # Hybrid fit is more stringent than log-linear — use a lower success threshold.
+    if len(boot_kds) < n_boot * 0.3:
+        return {**nan_result, "kd_baseline": kd_base, "n_boot_success": len(boot_kds)}
+
+    boot_kds = np.asarray(boot_kds)
+    return {
+        "kd_baseline": kd_base,
+        "kd_std": float(np.std(boot_kds)),
+        "kd_ci_low": float(np.percentile(boot_kds, 2.5)),
+        "kd_ci_high": float(np.percentile(boot_kds, 97.5)),
+        "n_boot_success": len(boot_kds),
+        "bp_std": float(np.std(boot_bps)) if len(boot_bps) > 1 else np.nan,
+    }
+
+
+def bootstrap_kd_uncertainty(
+    subsurface_photon_df,
+    n_boot=300,
+    vertical_res=0.25,
+    random_seed=42,
+    fit_method="bma",
+    min_decay_range_m=5.0,
+    min_decay_photons=30,
+    min_decay_bins=8,
+    min_total_photons=30,
+    min_total_range_m=5.0,
+):
+    """
+    Apply bootstrap to every along-track bin in a subsurface photon DataFrame.
+
+    Parameters
+    ----------
+    subsurface_photon_df : pd.DataFrame
+        Must contain 'lat_bins' and 'photon_height' columns.
+    n_boot : int
+        Bootstrap iterations per bin. Set to 0 to skip bootstrap entirely
+        (returns an empty DataFrame).
+    vertical_res : float
+        Depth bin width (m).
+    random_seed : int
+        Random seed for reproducibility.
+    fit_method : str
+        Fitting method for baseline and bootstrap iterations ('bma' or 'hybrid').
+    min_decay_range_m, min_decay_photons, min_decay_bins, min_total_photons,
+    min_total_range_m : forwarded to the fit function via
+        ``bootstrap_kd_for_bin`` so defaults match the pipeline fit.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: lat_bins, kd_baseline, kd_std, kd_ci_low, kd_ci_high,
+        n_boot_success, bp_std. One row per unique lat_bin in the input.
+        Empty DataFrame if n_boot=0.
+    """
+    empty_cols = [
+        "lat_bins",
+        "kd_baseline",
+        "kd_std",
+        "kd_ci_low",
+        "kd_ci_high",
+        "n_boot_success",
+        "bp_std",
+    ]
+    if n_boot <= 0:
+        return pd.DataFrame(columns=empty_cols)
+
+    rng = np.random.default_rng(random_seed)
+    results = []
+    for lb in sorted(subsurface_photon_df["lat_bins"].unique()):
+        bin_heights = subsurface_photon_df[subsurface_photon_df["lat_bins"] == lb][
+            "photon_height"
+        ].values
+        r = bootstrap_kd_for_bin(
+            bin_heights,
+            n_boot=n_boot,
+            vertical_res=vertical_res,
+            rng=rng,
+            fit_method=fit_method,
+            min_decay_range_m=min_decay_range_m,
+            min_decay_photons=min_decay_photons,
+            min_decay_bins=min_decay_bins,
+            min_total_photons=min_total_photons,
+            min_total_range_m=min_total_range_m,
+        )
+        r["lat_bins"] = lb
+        results.append(r)
+
+    if not results:
+        # Empty input (e.g. track rejected upstream) — preserve the schema
+        # so callers' df[cols] / merge calls don't blow up with KeyError.
+        return pd.DataFrame(columns=empty_cols)
+    df = pd.DataFrame(results)
+    cols = [
+        "lat_bins",
+        "kd_baseline",
+        "kd_std",
+        "kd_ci_low",
+        "kd_ci_high",
+        "n_boot_success",
+        "bp_std",
+    ]
+    return df[cols]
