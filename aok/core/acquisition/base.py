@@ -370,7 +370,7 @@ class DataRequest:
         from sliderule import icesat2
 
         params = self.build_atl24_params()
-        segments = icesat2.atl24g(params)
+        segments = icesat2.atl24(params)
 
         metadata = {
             "request_type": "atl24",
