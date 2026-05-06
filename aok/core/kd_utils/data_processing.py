@@ -395,7 +395,7 @@ def create_photon_dataframe(
 
     # Determine the EPSG code for the UTM zone based on the first photon's longitude and latitude
     epsg_code = convert_wgs_to_utm(lon_ph[0], lat_ph[0])
-epsg_code
+    
     # Perform orthometric correction to obtain UTM coordinates and corrected heights
     lat_utm, lon_utm, h_ph_cor = orthometric_correction(lat_ph, lon_ph, h_ph, epsg_code)
 
