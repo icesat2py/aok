@@ -284,9 +284,9 @@ def run_pipeline(args):
             ["relative_AT_dist", "lat_bins", "photon_height"]
         ].drop_duplicates()
         unique_photon_dataset["relative_AT_dist_center"] = (
-            unique_photon_dataset.groupby(
-                "lat_bins", observed=False
-            )["relative_AT_dist"].transform("mean")
+            unique_photon_dataset.groupby("lat_bins", observed=False)[
+                "relative_AT_dist"
+            ].transform("mean")
         )
 
         _closest_rows = []
