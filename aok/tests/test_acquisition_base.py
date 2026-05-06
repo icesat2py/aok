@@ -1,7 +1,4 @@
-from aok.core.acquisition.base import DataRequest
-from pathlib import Path
-from datetime import datetime, timedelta
-import time
+from datetime import datetime
 
 import pytest
 

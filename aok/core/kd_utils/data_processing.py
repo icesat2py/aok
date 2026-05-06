@@ -107,7 +107,9 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
         if ATTRIBUTES:
             # Getting attributes of IS2_atl03_mds beam variables
             IS2_atl03_attrs[gtx] = {}
-            IS2_atl03_attrs[gtx]["heights"] = {}  # corresponds to sliderule atl03_ph_fields
+            IS2_atl03_attrs[gtx][
+                "heights"
+            ] = {}  # corresponds to sliderule atl03_ph_fields
             IS2_atl03_attrs[gtx]["geolocation"] = {}  # slide rule atl03_geo_fields
             IS2_atl03_attrs[gtx]["bckgrd_atlas"] = {}  # sliderule atl03_bckgrd_fields
             IS2_atl03_attrs[gtx]["geophys_corr"] = {}  # sliderule atl03_cor_fields
