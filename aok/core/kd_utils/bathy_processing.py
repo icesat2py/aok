@@ -171,7 +171,7 @@ def compute_surface_sigma(binned_dataset_sea_surface, sea_surface_height):
 def apply_optional_surface_sigma_filter(
     binned_dataset_sea_surface,
     subsurface_photon_dataset,
-    sea_surface_height, # could be added to subsurface_photon dataset?
+    sea_surface_height,  # could be added to subsurface_photon dataset?
     sigma_max=0.5,
 ):
     """
@@ -323,7 +323,7 @@ def apply_optional_refraction_correction(
     return corrected
 
 
-# Ideas for retooling:# 
+# Ideas for retooling:#
 def apply_sea_surface_flattening(
     subsurface_photon_dataset,
     sea_surface_height,
@@ -432,7 +432,7 @@ def apply_sea_surface_flattening(
 
 
 # 1. Function to create an R-tree spatial index for raster bounds
-# takes in list of paths, outputs spatial dictionary and index. --> might be 
+# takes in list of paths, outputs spatial dictionary and index. --> might be
 # candidate for retooling? But also lower priority potentially if ATL24 is being
 # used.
 def create_spatial_index(gebco_paths):
@@ -852,8 +852,8 @@ def rebuild_and_refit_surface_after_refraction(
 
 
 # 5. The function to get the subsurface photon dataset
-# Major bang-for-buck retooling. Ideally would 
-# return one dataframe. 
+# Major bang-for-buck retooling. Ideally would
+# return one dataframe.
 def get_subsurface_photon(
     binned_dataset_sea_surface,
     GEBCO_paths,

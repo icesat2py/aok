@@ -6,22 +6,25 @@ This module is a placeholder for future icepyx integration.
 
 # should we first use an optional query to verify data is there? or simply handle the error gracefully?
 
+
 def construct_query(request):
     """
     Placeholder for future icepyx query construction.
 
-    This function will take the a request of class DataRequest and translate it into an icepyx query. 
-    that icepyx can 
+    This function will take the a request of class DataRequest and translate it into an icepyx query.
+    that icepyx can
     """
 
     raise NotImplementedError("construct_query exists but is not implemented yet.")
 
+
 def check_query(request):
     """
 
-    This will test if the data is available and will raise an error if it is not. 
+    This will test if the data is available and will raise an error if it is not.
     """
     raise NotImplementedError("test_query exists but is not implemented yet.")
+
 
 def get_icepyx_data(request) -> AcquisitionResult:
     """Placeholder for future icepyx acquisition logic."""
@@ -36,5 +39,6 @@ def get_icepyx_data(request) -> AcquisitionResult:
     # 2: check query
     # 3: request data
 
-
-    raise NotImplementedError("Icepyx_download exists but the download logic is not fully implemented yet.")
+    raise NotImplementedError(
+        "Icepyx_download exists but the download logic is not fully implemented yet."
+    )
