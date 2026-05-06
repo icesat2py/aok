@@ -7,9 +7,7 @@ import warnings
 import pandas as pd
 import geopandas as gpd
 from sliderule import sliderule, icesat2 
-from aok.core.kd_utils.data_processing import 
-
-OutputType = Literal["dataframe", "geodataframe", "files"]
+#from aok.core.kd_utils.data_processing import 
 
 
 @dataclass
@@ -333,7 +331,8 @@ class DataRequest:
             "poly": self.spatial,
             "t0": t0,
             "t1": t1,
-            "atl24": {"class_ph": ["bathymetry", "sea_surface"]},
+            "atl24": {"class_ph": ["bathymetry", "sea_surface"],
+                     "compact": False },
         }
 
         output_params = self._sliderule_output_params("atl24_output.parquet")
@@ -367,21 +366,20 @@ class DataRequest:
         )
 
     def get_atl24_data(self) -> AcquisitionResult:
-        from sliderule import icesat2
 
         params = self.build_atl24_params()
-        segments = icesat2.atl24(params)
+        photons = sliderule.run("atl24x",params)
 
         metadata = {
             "request_type": "atl24",
-            "n_rows": len(segments),
-            "columns": list(segments.columns),
+            "n_rows": len(photons),
+            "columns": list(photons.columns),
         }
 
         return AcquisitionResult(
             source="sliderule",
             product="ATL24",
-            segments=segments,
+            photons=photons,
             metadata=metadata,
         )
 
@@ -398,8 +396,18 @@ class DataRequest:
 
         if self.need_atl24:
             results.append(self.get_atl24_data())
+            
+        # Hacky; need to reurn object rather than results, also 
+        # duplicates data frame. currently
+        full_results = results[0].photons.merge(
+            results[1].photons,
+            left_on="time_ns",
+            right_on="time_ns",
+            how="left",
+            suffixes=("_atl03", "_atl24")
+        )
 
-        return results
+        return full_results
 
     # variables I appear to need for icephotons dataset
     """
