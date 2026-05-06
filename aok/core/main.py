@@ -147,7 +147,8 @@ def run_pipeline(args):
         sys.exit(1)
     logger.info("Strong beams selected: %s", target_strong_beams)
     plot_target_beam = [target_strong_beams[0]]
-
+    
+    # Place to insert sliderule into code
     sea_photon_dataset = Extract_sea_photons(
         is2_mds, target_strong_beams, shoreline_data_path
     )

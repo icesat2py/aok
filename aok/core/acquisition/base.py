@@ -5,6 +5,12 @@ from typing import Literal
 import warnings
 
 import pandas as pd
+<<<<<<< Updated upstream
+=======
+import geopandas as gpd
+from sliderule import sliderule, icesat2 
+from aok.core.kd_utils.data_processing import isolate_sea_land_photons
+>>>>>>> Stashed changes
 
 OutputType = Literal["dataframe", "geodataframe", "files"]
 
