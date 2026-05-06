@@ -15,9 +15,87 @@ class AcquisitionResult:
     source: str  # "icepyx" or "sliderule"
     product: str
     photons: pd.DataFrame | None = None
-    segments: pd.DataFrame | None = None
     local_files: list[Path] | None = None
     metadata: dict | None = None
+    
+    @classmethod
+    def merge(cls, results: list["AcquisitionResult"]) -> "AcquisitionResult":
+        """
+        Merge multiple AcquisitionResult objects into one.
+
+        - Concatenates photon DataFrames.
+        - Combines sources into a list.
+        - Combines products into a list.
+        - Combines local files into one list.
+        - Appends metadata into a list, preserving each result's metadata.
+        """
+        if not results:
+            raise ValueError("Cannot merge an empty list of AcquisitionResult objects.")
+
+        photon_dfs = [
+            result.photons
+            for result in results
+            if result.photons is not None
+        ]
+        atl03_results = [
+            result for result in results
+                if result.product.upper() == "ATL03" and result.photons is not None
+        ]
+        if not atl03_results:
+            raise ValueError("Cannot merge photons: no ATL03 result with photons found.")
+            
+        if len(atl03_results) > 1:
+            raise ValueError("Cannot merge photons: more than one ATL03 result found.")
+            
+        merged_photons = atl03_results[0].photons.copy()
+
+        for result in results:
+            if result is atl03_results[0]:
+                continue
+        
+            if result.photons is None:
+                continue
+        
+            if "time_ns" not in result.photons.columns:
+                raise ValueError(
+                    f"Cannot merge photons: {result.product} photons are missing 'time_ns'."
+                )
+
+        merged_photons = merged_photons.merge(
+            result.photons,
+            on="time_ns",
+            how="left",
+            suffixes=("", f"_{result.product.lower()}"),
+        )
+
+        sources = [result.source for result in results]
+        products = [result.product for result in results]
+
+        local_files: list[Path] = []
+        for result in results:
+            if result.local_files is not None:
+                local_files.extend(result.local_files)
+
+        metadata = {
+            "merged_from": [
+                {
+                    "source": result.source,
+                    "product": result.product,
+                    "metadata": result.metadata,
+                }
+                for result in results
+            ],
+            "n_results_merged": len(results),
+            "n_rows": len(merged_photons) if merged_photons is not None else 0,
+        }
+
+        return cls(
+            source="+".join(sorted(set(sources))),
+            product="+".join(sorted(set(products))),
+            photons=merged_photons,
+            local_files=local_files or None,
+            metadata=metadata,
+        )
 
 
 @dataclass
@@ -25,7 +103,7 @@ class DataRequest:
     """
     Backend request that describes what data should be acquired.
 
-    The class stores the user's requested spatial, temporal, and product information in a shared format with methods that call either icepyx downloader or the SlideRule aquisition code.
+    The class stores the user's requested spatial, temporal, and product information in a shared format with methods that call either icepyx downloader or the SlideRule aquisition code and the eventual photons dataset.
 
     spatial
         Optional spatial region of interest, such as a bounding box or polygon.
@@ -64,6 +142,9 @@ class DataRequest:
 
     shoreline_data:
         Path to the global shoreline dataset.
+
+    photons: 
+        geo-referenced dataframe that stores the results of the sliderule call.
     """
 
     spatial: Any | None = None
@@ -89,6 +170,8 @@ class DataRequest:
 
     options: dict[str, Any] = field(default_factory=dict)
 
+    photons: gpd.GeoDataFrame | pd.data.frame | None = None
+
     def validate(self) -> None:
         """
         Placeholder validation for datarequest structure.
@@ -97,7 +180,6 @@ class DataRequest:
         - validate that time is specified correctly
         - validate that download paths are coercible to type Path
         - validate that specification is correct for either a sliderule request or icepyx request
-
         """
         return
 
@@ -383,7 +465,12 @@ class DataRequest:
             metadata=metadata,
         )
 
-    def get_sliderule_data(self) -> list[AcquisitionResult]:
+    def get_sliderule_data(self) -> AcquisitionResult:
+        """
+        Use sliderule to get data from all sources and return 
+        as a list of aquisition results
+       
+        """
         from sliderule import sliderule
 
         self.validate()
@@ -395,19 +482,9 @@ class DataRequest:
             results.append(self.get_atl03_data())
 
         if self.need_atl24:
-            results.append(self.get_atl24_data())
-            
-        # Hacky; need to reurn object rather than results, also 
-        # duplicates data frame. currently
-        full_results = results[0].photons.merge(
-            results[1].photons,
-            left_on="time_ns",
-            right_on="time_ns",
-            how="left",
-            suffixes=("_atl03", "_atl24")
-        )
+            results.append(self.get_atl24_data()) 
 
-        return full_results
+        return results.merge()
 
     # variables I appear to need for icephotons dataset
     """
