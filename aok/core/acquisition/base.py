@@ -434,12 +434,16 @@ class DataRequest:
     
         atl03_photons = None
         atl24_photons = None
+
+        self.products = []
+        self.sources = []
+        self.metadata = {}
     
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
-            fetched_products.append("ATL03")
-            sources.append("sliderule")
-            product_metadata["ATL03"] = {
+            self.products.append("ATL03")
+            self.sources.append("sliderule")
+            self.metadata["ATL03"] = {
                 "request_type": "atl03",
                 "n_rows": len(atl03_photons),
                 "columns": list(atl03_photons.columns),
@@ -447,9 +451,9 @@ class DataRequest:
     
         if self.need_atl24:
             atl24_photons = self.get_atl24_data()
-            fetched_products.append("ATL24")
-            sources.append("sliderule")
-            product_metadata["ATL24"] = {
+            self.products.append("ATL24")
+            self.sources.append("sliderule")
+            self.metadata["ATL24"] = {
                 "request_type": "atl24",
                 "n_rows": len(atl24_photons),
                 "columns": list(atl24_photons.columns),
@@ -466,16 +470,6 @@ class DataRequest:
             self.photons = atl24_photons
         else:
             self.photons = None
-    
-        self.products = fetched_products
-        self.sources = sources
-        self.metadata = product_metadata
-        
-        self.metadata["merged"] = {
-            "products": self.products,
-            "sources": self.sources,
-            "n_rows": len(self.photons) if self.photons is not None else 0,
-        }
         
         return self
 
