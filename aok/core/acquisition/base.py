@@ -1,101 +1,12 @@
 # contains classes for data input objects and data output objects after aquisition from the cloud.
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 import warnings
 import pandas as pd
 import geopandas as gpd
 from sliderule import sliderule, icesat2 
 #from aok.core.kd_utils.data_processing import 
-
-
-@dataclass
-class AcquisitionResult:
-    source: str  # "icepyx" or "sliderule"
-    product: str
-    photons: pd.DataFrame | None = None
-    local_files: list[Path] | None = None
-    metadata: dict | None = None
-    
-    @classmethod
-    def merge(cls, results: list["AcquisitionResult"]) -> "AcquisitionResult":
-        """
-        Merge multiple AcquisitionResult objects into one.
-
-        - Concatenates photon DataFrames.
-        - Combines sources into a list.
-        - Combines products into a list.
-        - Combines local files into one list.
-        - Appends metadata into a list, preserving each result's metadata.
-        """
-        if not results:
-            raise ValueError("Cannot merge an empty list of AcquisitionResult objects.")
-
-        photon_dfs = [
-            result.photons
-            for result in results
-            if result.photons is not None
-        ]
-        atl03_results = [
-            result for result in results
-                if result.product.upper() == "ATL03" and result.photons is not None
-        ]
-        if not atl03_results:
-            raise ValueError("Cannot merge photons: no ATL03 result with photons found.")
-            
-        if len(atl03_results) > 1:
-            raise ValueError("Cannot merge photons: more than one ATL03 result found.")
-            
-        merged_photons = atl03_results[0].photons.copy()
-
-        for result in results:
-            if result is atl03_results[0]:
-                continue
-        
-            if result.photons is None:
-                continue
-        
-            if "time_ns" not in result.photons.columns:
-                raise ValueError(
-                    f"Cannot merge photons: {result.product} photons are missing 'time_ns'."
-                )
-
-        merged_photons = merged_photons.merge(
-            result.photons,
-            on="time_ns",
-            how="left",
-            suffixes=("", f"_{result.product.lower()}"),
-        )
-
-        sources = [result.source for result in results]
-        products = [result.product for result in results]
-
-        local_files: list[Path] = []
-        for result in results:
-            if result.local_files is not None:
-                local_files.extend(result.local_files)
-
-        metadata = {
-            "merged_from": [
-                {
-                    "source": result.source,
-                    "product": result.product,
-                    "metadata": result.metadata,
-                }
-                for result in results
-            ],
-            "n_results_merged": len(results),
-            "n_rows": len(merged_photons) if merged_photons is not None else 0,
-        }
-
-        return cls(
-            source="+".join(sorted(set(sources))),
-            product="+".join(sorted(set(products))),
-            photons=merged_photons,
-            local_files=local_files or None,
-            metadata=metadata,
-        )
-
 
 @dataclass
 class DataRequest:
@@ -169,7 +80,7 @@ class DataRequest:
 
     options: dict[str, Any] = field(default_factory=dict)
 
-    photons: gpd.GeoDataFrame | pd.data.frame | None = None
+    photons: gpd.GeoDataFrame | pd.DataFrame | None = None
 
     def validate(self) -> None:
         """
@@ -468,26 +379,76 @@ class DataRequest:
         
         return self
 
+    def _merge_photons(
+        self,
+        atl03_photons: pd.DataFrame,
+        atl24_photons: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """
+        Merge ATL24 photon information onto ATL03 photons using time_ns.
+
+        ATL03 is treated as the left-most dataframe. If ATL03 is a GeoDataFrame,
+        its geometry is preserved as the active geometry.
+        """
+        
+        if "time_ns" not in atl03_photons.columns:
+            raise ValueError("Cannot merge photons: ATL03 photons are missing 'time_ns'.")
+
+        if "time_ns" not in atl24_photons.columns:
+            raise ValueError("Cannot merge photons: ATL24 photons are missing 'time_ns'.")
+    
+        merged = atl03_photons.merge(
+            atl24_photons,
+            on="time_ns",
+            how="left",
+            suffixes=("", "_atl24"),
+        )
+        if isinstance(atl03_photons, gpd.GeoDataFrame):
+            geometry_name = atl03_photons.geometry.name
+            merged = gpd.GeoDataFrame(
+                merged,
+                geometry=geometry_name,
+                crs=atl03_photons.crs,
+                )
+        return merged
+
     def get_sliderule_data(self) -> AcquisitionResult:
         """
         Use sliderule to get data from all sources and return 
         as a list of aquisition results
        
         """
-        from sliderule import sliderule
-
         self.validate()
         sliderule.init("slideruleearth.io")
-
-        results: AcquisitionResult = []
-
+    
+        atl03_photons = None
+        atl24_photons = None
+    
         if self.need_atl03:
-            results.append(self.get_atl03_data())
-
+            atl03_photons = self.get_atl03_data()
+    
         if self.need_atl24:
-            results.append(self.get_atl24_data()) 
-
-        return results.merge()
+            atl24_photons = self.get_atl24_data()
+    
+        if atl03_photons is not None and atl24_photons is not None:
+            self.photons = self._merge_photons(
+                atl03_photons=atl03_photons,
+                atl24_photons=atl24_photons,
+            )
+        elif atl03_photons is not None:
+            self.photons = atl03_photons
+        elif atl24_photons is not None:
+            self.photons = atl24_photons
+        else:
+            self.photons = None
+    
+        self.metadata["merged"] = {
+            "products": self.products,
+            "sources": self.sources,
+            "n_rows": len(self.photons) if self.photons is not None else 0,
+        }
+        
+        return self
 
     # variables I appear to need for icephotons dataset
     """
