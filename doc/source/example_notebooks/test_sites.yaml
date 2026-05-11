@@ -287,3 +287,19 @@ locations:
     - 42.450206
     - -122.00504
     buffer: 3.0
+- name: chesapeake_bay
+  RGT: null
+  filename: ATL03_20230825074121_10102002_006_02.h5
+  dates:
+    start: '2018-10-22'
+    end: '2018-10-26'
+  spatial_extent:
+    bbox:
+    - -77.54
+    - 36.66
+    - -74.58
+    - 39.63
+    latlon:
+    - null
+    - null
+    buffer: 0.0
