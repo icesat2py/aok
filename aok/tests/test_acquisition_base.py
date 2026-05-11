@@ -4,6 +4,11 @@ import pandas as pd
 import pytest
 
 from aok.core.acquisition.base import DataRequest
+from aok.tests.column_requirements import (
+    REQUIRED_ATL03_COLUMNS,
+    REQUIRED_GEBCO_COLUMNS,
+    REQUIRED_ATL24_COLUMNS,
+)
 
 
 @pytest.fixture
@@ -20,29 +25,46 @@ def basic_request():
         spatial=srextent,
     )
 
-
 @pytest.fixture
 def fake_atl03_photons():
-    return pd.DataFrame(
+    photons = pd.DataFrame(
         {
-            "time_ns": [1, 2, 3],
-            "x_atc": [0.0, 2.0, 3.0],
-            "height": [10.0, 20.0, 30.0],
-            "atl03_cnf": [1, 0, 4],
+            column: [None, None, None]
+            for column in REQUIRED_ATL03_COLUMNS
         }
     )
 
+    photons["time_ns"] = [1, 2, 3]
+    photons["x_atc"] = [0.0, 2.0, 3.0]
+    photons["height"] = [10.0, 20.0, 30.0]
+    photons["atl03_cnf"] = [1, 0, 4]
+
+    return photons
+
+@pytest.fixture
+def fake_atl03_photons_with_gebco(fake_atl03_photons):
+    photons = fake_atl03_photons.copy()
+
+    photons["gebco.fileid"] = ["gebco_1", "gebco_1", "gebco_1"]
+    photons["gebco.time_ns"] = [1, 2, 3]
+    photons["gebco.value"] = [-12.5, -13.0, -11.8]
+
+    return photons
 
 @pytest.fixture
 def fake_atl24_photons():
-    return pd.DataFrame(
+    photons = pd.DataFrame(
         {
-            "time_ns": [1, 3],
-            "x_atc": [0.0, 3.0],
-            "class_ph": [40, 40],
-            "ortho_h": [-5.0, 0.2],
+            column: [None, None]
+            for column in REQUIRED_ATL03_COLUMNS
         }
     )
+    photons["time_ns"] = [1, 3]
+    photons["x_atc"] = [0.0, 3.0]
+    photons["class_ph"] = [40, 40]
+    photons["ortho_h"] = [-5.0, 0.2]
+    
+    return photons
 
 def test_data_request_defaults():
     """
@@ -246,6 +268,20 @@ def test_build_atl03_params_does_not_add_gebco(basic_request, tmp_path):
 
     assert "samples" not in params
 
+def test_atl03_photons_with_gebco_have_required_columns(
+    fake_atl03_photons_with_gebco,
+):
+    required_columns = REQUIRED_ATL03_COLUMNS.union(REQUIRED_GEBCO_COLUMNS)
+
+    missing_columns = required_columns.difference(
+        fake_atl03_photons_with_gebco.columns
+    )
+
+    assert not missing_columns, (
+        "ATL03 photons with GEBCO are missing required columns: "
+        f"{sorted(missing_columns)}"
+    )
+    
 def test_get_atl03_data_calls_sliderule_run(
     monkeypatch,
     basic_request,
@@ -272,6 +308,54 @@ def test_get_atl03_data_calls_sliderule_run(
     assert calls[0]["api"] == "atl03x"
     assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
     assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
+
+
+def test_get_sliderule_data_with_gebco_records_gebco_columns(
+    monkeypatch,
+    basic_request,
+    fake_atl03_photons_with_gebco,
+):
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.output = None
+    basic_request.need_atl03 = True
+    basic_request.need_atl24 = False
+    basic_request.need_gebco = True
+
+    def fake_init(sliderule_url):
+        return None
+
+    def fake_run(api, params):
+        assert api == "atl03x"
+        assert params["samples"] == {"gebco": {"asset": "gebco-s3"}}
+        return fake_atl03_photons_with_gebco
+
+    monkeypatch.setattr(
+        "aok.core.acquisition.base.sliderule.init",
+        fake_init,
+    )
+    monkeypatch.setattr(
+        "aok.core.acquisition.base.sliderule.run",
+        fake_run,
+    )
+
+    result = basic_request.get_sliderule_data()
+
+    assert result is basic_request
+    assert basic_request.photons is fake_atl03_photons_with_gebco
+
+    missing_columns = REQUIRED_GEBCO_COLUMNS.difference(
+        basic_request.photons.columns
+    )
+    assert not missing_columns, (
+        "GEBCO-enabled ATL03 result is missing GEBCO columns: "
+        f"{sorted(missing_columns)}"
+    )
+
+    assert basic_request.products == ["ATL03"]
+    assert basic_request.sources == ["sliderule"]
+    assert set(basic_request.metadata["ATL03"]["columns"]) == set(
+        fake_atl03_photons_with_gebco.columns
+    )
 
 def test_get_atl24_data_calls_sliderule_run(
     monkeypatch,
@@ -403,17 +487,11 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
 
     assert basic_request.metadata["ATL03"]["request_type"] == "atl03"
     assert basic_request.metadata["ATL03"]["n_rows"] == 3
-    assert basic_request.metadata["ATL03"]["columns"] == [
-        "time_ns",
-        "x_atc",
-        "height",
-        "atl03_cnf",
-    ]
+    assert set(basic_request.metadata["ATL03"]["columns"]) == set(
+        fake_atl03_photons.columns
+    )
     assert basic_request.metadata["ATL24"]["request_type"] == "atl24"
     assert basic_request.metadata["ATL24"]["n_rows"] == 2
-    assert basic_request.metadata["ATL24"]["columns"] == [
-        "time_ns",
-        "x_atc",
-        "class_ph",
-        "ortho_h",
-    ]
+    assert set(basic_request.metadata["ATL24"]["columns"]) == set(
+        fake_atl24_photons.columns
+        )
