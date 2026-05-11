@@ -435,40 +435,38 @@ class DataRequest:
         params.update(self.options)
         return params
 
-    def get_atl03_data(self) -> AcquisitionResult:
+    def get_atl03_data(self) -> "DataRequest":
         params = self.build_atl03_params()
         photons = sliderule.run("atl03x", params)
 
-        metadata = {
-            "request_type": "atl03",
-            "n_rows": len(photons),
-            "columns": list(photons.columns),
+        photons = sliderule.run("atl03x", params)
+        
+        self.photons = photons
+        self.sources.append("sliderule")
+        self.products.append("ATL03")
+        # not sure if we want to keep atl03 metadata in new object
+        self.metadata["ATL03"] = {
+        "request_type": "atl03",
+        "n_rows": len(photons),
+        "columns": list(photons.columns),
         }
 
-        return AcquisitionResult(
-            source="sliderule",
-            product="ATL03",
-            photons=photons,
-            metadata=metadata,
-        )
+        return self
 
-    def get_atl24_data(self) -> AcquisitionResult:
-
+    def get_atl24_data(self) -> "DataRequest":
         params = self.build_atl24_params()
-        photons = sliderule.run("atl24x",params)
-
-        metadata = {
+        photons = sliderule.run("atl24x", params)
+    
+        self.photons = photons
+        self.sources.append("sliderule")
+        self.products.append("ATL24")
+        self.metadata["ATL24"] = {
             "request_type": "atl24",
             "n_rows": len(photons),
             "columns": list(photons.columns),
         }
-
-        return AcquisitionResult(
-            source="sliderule",
-            product="ATL24",
-            photons=photons,
-            metadata=metadata,
-        )
+        
+        return self
 
     def get_sliderule_data(self) -> AcquisitionResult:
         """
@@ -481,7 +479,7 @@ class DataRequest:
         self.validate()
         sliderule.init("slideruleearth.io")
 
-        results: list[AcquisitionResult] = []
+        results: AcquisitionResult = []
 
         if self.need_atl03:
             results.append(self.get_atl03_data())
