@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 import warnings
-
 import pandas as pd
 import geopandas as gpd
 from sliderule import sliderule, icesat2 
@@ -250,10 +249,17 @@ class DataRequest:
                 raise ValueError(
                     "download_dir is required when output format is specified."
                 )
+                
+            download_dir = Path(self.download_dir).expanduser().resolve(strict=False)
+            download_dir.mkdir(parents=True, exist_ok=True)
+            
             if geoparquet_name is None:
                 geoparquet_name = "kdOutputAsGeo.geoparquet"
+
+            output_path = (download_dir / Path(geoparquet_name)).resolve(strict=False)
+            
             return {
-                "path": str(Path(self.download_dir) / geoparquet_name),
+                "path": str(output_path),
                 "format": "parquet",
                 "as_geo": True,
                 "open_on_complete": True,
@@ -368,11 +374,10 @@ class DataRequest:
         }  # height above WGS-84 ref ellipsoid
 
         params.update(atl03_geophys_corr)
-
+        
+        # per email with atl09 folks, backg_c is the background rate
         params["atl09_fields"] = [
-            "bckgrd_atlas/bckgrd_counts",
-            "bckgrd_atlas/bckgrd_counts_reduced",
-            "bckgrd_atlas/bckgrd_rate",
+            "high_rate/backg_c",
         ]
 
         # auxillary param notes:
