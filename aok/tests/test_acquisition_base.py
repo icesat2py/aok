@@ -39,7 +39,7 @@ def fake_atl03_photons():
     photons["height"] = [10.0, 20.0, 30.0]
     photons["atl03_cnf"] = [1, 0, 4]
 
-    return photons
+    return photons.set_index("time_ns")
 
 @pytest.fixture
 def fake_atl03_photons_with_gebco(fake_atl03_photons):
@@ -56,7 +56,7 @@ def fake_atl24_photons():
     photons = pd.DataFrame(
         {
             column: [None, None]
-            for column in REQUIRED_ATL03_COLUMNS
+            for column in REQUIRED_ATL24_COLUMNS
         }
     )
     photons["time_ns"] = [1, 3]
@@ -64,7 +64,7 @@ def fake_atl24_photons():
     photons["class_ph"] = [40, 40]
     photons["ortho_h"] = [-5.0, 0.2]
     
-    return photons
+    return photons.set_index("time_ns")
 
 def test_data_request_defaults():
     """
@@ -394,11 +394,12 @@ def test_merge_photons_left_joins_atl24_to_atl03(
         atl24_photons=fake_atl24_photons,
     )
 
-    assert list(merged["time_ns"]) == [1, 2, 3]
+    assert merged.index.name == "time_ns"
+    assert list(merged.index) == [1, 2, 3]
     assert list(merged["height"]) == [10.0, 20.0, 30.0]
     assert list(merged["atl03_cnf"]) == [1, 0, 4]
-    assert merged.loc[0, "ortho_h"] == -5.0
-    assert merged.loc[2, "ortho_h"] == 0.2
+    assert merged.loc[1, "ortho_h"] == -5.0
+    assert merged.loc[3, "ortho_h"] == 0.2
     assert "x_atc_atl24" in merged.columns
 
 def test_merge_photons_requires_time_ns_in_atl03(
@@ -475,7 +476,7 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert [call["api"] for call in run_calls] == ["atl03x", "atl24x"]
 
     assert basic_request.photons is not None
-    assert list(basic_request.photons["time_ns"]) == [1, 2, 3]
+    assert list(basic_request.photons.index) == [1, 2, 3]
     assert "x_atc" in basic_request.photons.columns
     assert "height" in basic_request.photons.columns
     assert "class_ph" in basic_request.photons.columns

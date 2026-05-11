@@ -397,30 +397,71 @@ class DataRequest:
     ) -> pd.DataFrame:
         """
         Merge ATL24 photon information onto ATL03 photons using time_ns.
-
-        ATL03 is treated as the left-most dataframe. If ATL03 is a GeoDataFrame,
-        its geometry is preserved as the active geometry.
-        """
-        
-        if "time_ns" not in atl03_photons.columns:
-            raise ValueError("Cannot merge photons: ATL03 photons are missing 'time_ns'.")
-
-        if "time_ns" not in atl24_photons.columns:
-            raise ValueError("Cannot merge photons: ATL24 photons are missing 'time_ns'.")
     
-        merged = atl03_photons.merge(
-            atl24_photons,
-            on="time_ns",
-            how="left",
-            suffixes=("", "_atl24"),
-        )
+        ATL03 is treated as the left-most dataframe. The merged result preserves
+        ATL03 row order and preserves time_ns as the index when ATL03 uses time_ns
+        as its index.
+        """
+        atl03_has_time_ns_index = atl03_photons.index.name == "time_ns"
+        atl24_has_time_ns_index = atl24_photons.index.name == "time_ns"
+    
+        atl03_has_time_ns_column = "time_ns" in atl03_photons.columns
+        atl24_has_time_ns_column = "time_ns" in atl24_photons.columns
+    
+        if not atl03_has_time_ns_index and not atl03_has_time_ns_column:
+            raise ValueError(
+                "Cannot merge photons: ATL03 photons are missing 'time_ns' "
+                "as both a column and an index."
+            )
+    
+        if not atl24_has_time_ns_index and not atl24_has_time_ns_column:
+            raise ValueError(
+                "Cannot merge photons: ATL24 photons are missing 'time_ns' "
+                "as both a column and an index."
+            )
+    
+        if atl03_has_time_ns_index and atl24_has_time_ns_index:
+            merged = atl03_photons.merge(
+                atl24_photons,
+                left_index=True,
+                right_index=True,
+                how="left",
+                suffixes=("", "_atl24"),
+            )
+    
+        elif atl03_has_time_ns_index and atl24_has_time_ns_column:
+            merged = atl03_photons.merge(
+                atl24_photons,
+                left_index=True,
+                right_on="time_ns",
+                how="left",
+                suffixes=("", "_atl24"),
+            ).set_index("time_ns")
+    
+        elif atl03_has_time_ns_column and atl24_has_time_ns_index:
+            merged = atl03_photons.merge(
+                atl24_photons,
+                left_on="time_ns",
+                right_index=True,
+                how="left",
+                suffixes=("", "_atl24"),
+            )
+    
+        else:
+            merged = atl03_photons.merge(
+                atl24_photons,
+                on="time_ns",
+                how="left",
+                suffixes=("", "_atl24"),
+            )
+    
         if isinstance(atl03_photons, gpd.GeoDataFrame):
-            geometry_name = atl03_photons.geometry.name
             merged = gpd.GeoDataFrame(
                 merged,
-                geometry=geometry_name,
+                geometry=atl03_photons.geometry.name,
                 crs=atl03_photons.crs,
-                )
+            )
+    
         return merged
 
     def get_sliderule_data(self) -> "DataRequest":
