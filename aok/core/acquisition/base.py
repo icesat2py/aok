@@ -11,51 +11,83 @@ from sliderule import sliderule, icesat2
 @dataclass
 class DataRequest:
     """
-    Backend request that describes what data should be acquired.
-
-    The class stores the user's requested spatial, temporal, and product information in a shared format with methods that call either icepyx downloader or the SlideRule aquisition code and the eventual photons dataset.
-
+    Backend request object describing what data should be acquired.
+    
+    DataRequest stores the user's requested spatial, temporal, product, and
+    output options in a shared format. It provides methods for building SlideRule
+    request parameters, fetching ATL03 and/or ATL24 data, optionally merging those
+    datasets, and storing the final photon table on the request object itself.
+    
+    The final acquired dataset is stored in `photons`. If both ATL03 and ATL24 are
+    requested, ATL03 is treated as the left-hand photon table and ATL24 attributes
+    are merged onto it using `time_ns`. If only one product is requested, that
+    product's photon table is stored directly in `photons`.
+    
+    Request attributes
+    ------------------
     spatial
-        Optional spatial region of interest, such as a bounding box or polygon.
-        If not set, pull whole Earth. Optional spatial extent of interest,
-        provided as a bounding box, list of polygon coordinates, or
-        geospatial polygon file.
-
-    date_range:
-        Optional start and end date strings.
-    time_range:
-        Optional start and end time strings.
+        Optional spatial region of interest. This may be a bounding box, polygon
+        coordinate list, or another geometry-like object accepted by the downstream
+        acquisition method.
+    date_range
+        Optional tuple of start and end date strings in YYYY-MM-DD format.
+    time_range
+        Optional tuple of start and end time strings in HH:MM:SS format. If not
+        provided, the full day is used for each date in `date_range`.
     beams
-        Optional list of beam identifiers to request. # need to check with Jessica if all beams come down, or only some can be selected at a time. might not be necessary to filter at this stage.
+        Optional list of beam identifiers to request.
     output
-        Preferred output format, such as "dataframe", "geodataframe".
+        Preferred output mode. Supported values are currently "dataframe" and
+        "geodataframe".
     download_dir
-        The location to download  files to
+        Directory where SlideRule output files should be written when file output
+        is requested.
+    
+    Product flags
+    -------------
     need_atl03
-        Whether ATL03 data should be requested. Default: True
+        Whether ATL03 photon data should be requested.
     need_atl24
-        Whether ATL24 data should be requested. Default: True
+        Whether ATL24 bathymetry-classified photon data should be requested.
     need_gebco
-        Whether GEBCO bathymetry data should be requested. Default: True
+        Whether GEBCO bathymetry samples should be requested with ATL03.
     need_shoreline
-        Whether a simple shoreline spatial shapefile should be aquired. Can make filtering easier. Default: True
+        Whether shoreline data should be used for spatial filtering. This behavior
+        is not fully implemented yet.
     need_jpl_temperature
-        Whether sea surface temperature dataset from JPL should be requested. Likely to not need this. Default: False
-    version_atl03:
-        Optional version of atl03 data that should be requested.
-    version_atl03:
-        Optional version of atl24 data that should be requested.
-    variables_atl03:
-        Other variables to pass for atl03 acquisition #unsure if this is necessary
-    variables_atl24:
-        Other variables to pass for atl24 acquisition  #unsure if this is necessary
-
-    shoreline_data:
-        Path to the global shoreline dataset.
-
-    photons: 
-        geo-referenced dataframe that stores the results of the sliderule call.
-    """
+        Whether JPL sea surface temperature data should be requested. This behavior
+        is not implemented yet.
+    
+    Product options
+    ---------------
+    version_atl03
+        Optional ATL03 product version.
+    version_atl24
+        Optional ATL24 product version.
+    variables_atl03
+        Optional additional ATL03 parameters or fields.
+    variables_atl24
+        Optional additional ATL24 fields.
+    shoreline_data
+        Optional path to shoreline data used for future spatial filtering.
+    options
+        Additional keyword-style options passed through to the relevant acquisition
+        parameter builder.
+    
+    Result attributes
+    -----------------
+    photons
+        Final acquired photon table. This is usually a pandas DataFrame or
+        GeoPandas GeoDataFrame. If both ATL03 and ATL24 are requested, this stores
+        the merged photon table.
+    metadata
+        Dictionary containing acquisition metadata, such as requested products,
+        source information, row counts, and column names.
+    sources
+        List of acquisition sources used to create the final photon table.
+    products
+        List of products included in the final photon table.
+        """
 
     spatial: Any | None = None
     date_range: tuple[str, str] | None = None
@@ -79,8 +111,12 @@ class DataRequest:
     shoreline_data: Path | None = None
 
     options: dict[str, Any] = field(default_factory=dict)
-
+    
+    # outputs
     photons: gpd.GeoDataFrame | pd.DataFrame | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    sources: list[str] = field(default_factory=list)
+    products: list[str] = field(default_factory=list)
 
     def validate(self) -> None:
         """
@@ -346,38 +382,13 @@ class DataRequest:
         params.update(self.options)
         return params
 
-    def get_atl03_data(self) -> "DataRequest":
+    def get_atl03_data(self) -> pd.DataFrame:
         params = self.build_atl03_params()
-        photons = sliderule.run("atl03x", params)
+        return sliderule.run("atl03x", params)
 
-        photons = sliderule.run("atl03x", params)
-        
-        self.photons = photons
-        self.sources.append("sliderule")
-        self.products.append("ATL03")
-        # not sure if we want to keep atl03 metadata in new object
-        self.metadata["ATL03"] = {
-        "request_type": "atl03",
-        "n_rows": len(photons),
-        "columns": list(photons.columns),
-        }
-
-        return self
-
-    def get_atl24_data(self) -> "DataRequest":
+    def get_atl24_data(self) -> pd.DataFrame:
         params = self.build_atl24_params()
-        photons = sliderule.run("atl24x", params)
-    
-        self.photons = photons
-        self.sources.append("sliderule")
-        self.products.append("ATL24")
-        self.metadata["ATL24"] = {
-            "request_type": "atl24",
-            "n_rows": len(photons),
-            "columns": list(photons.columns),
-        }
-        
-        return self
+        return sliderule.run("atl24x", params)
 
     def _merge_photons(
         self,
@@ -412,7 +423,7 @@ class DataRequest:
                 )
         return merged
 
-    def get_sliderule_data(self) -> AcquisitionResult:
+    def get_sliderule_data(self) -> "DataRequest":
         """
         Use sliderule to get data from all sources and return 
         as a list of aquisition results
@@ -426,9 +437,23 @@ class DataRequest:
     
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
+            fetched_products.append("ATL03")
+            sources.append("sliderule")
+            product_metadata["ATL03"] = {
+                "request_type": "atl03",
+                "n_rows": len(atl03_photons),
+                "columns": list(atl03_photons.columns),
+            }
     
         if self.need_atl24:
             atl24_photons = self.get_atl24_data()
+            fetched_products.append("ATL24")
+            sources.append("sliderule")
+            product_metadata["ATL24"] = {
+                "request_type": "atl24",
+                "n_rows": len(atl24_photons),
+                "columns": list(atl24_photons.columns),
+            }
     
         if atl03_photons is not None and atl24_photons is not None:
             self.photons = self._merge_photons(
@@ -442,6 +467,10 @@ class DataRequest:
         else:
             self.photons = None
     
+        self.products = fetched_products
+        self.sources = sources
+        self.metadata = product_metadata
+        
         self.metadata["merged"] = {
             "products": self.products,
             "sources": self.sources,
