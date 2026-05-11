@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pandas as pd
 import pytest
 
 from aok.core.acquisition.base import DataRequest
@@ -15,11 +16,33 @@ def basic_request():
         {"lon": spatial_extent[1], "lat": spatial_extent[2]},
         {"lon": spatial_extent[1], "lat": spatial_extent[0]},
     ]
-    temporal = [datetime(2020, 3, 15, 6), datetime(2020, 3, 15, 9)]
     return DataRequest(
         spatial=srextent,
     )
 
+
+@pytest.fixture
+def fake_atl03_photons():
+    return pd.DataFrame(
+        {
+            "time_ns": [1, 2, 3],
+            "x_atc": [0.0, 2.0, 3.0],
+            "height": [10.0, 20.0, 30.0],
+            "atl03_cnf": [1, 0, 4],
+        }
+    )
+
+
+@pytest.fixture
+def fake_atl24_photons():
+    return pd.DataFrame(
+        {
+            "time_ns": [1, 3],
+            "x_atc": [0.0, 3.0],
+            "class_ph": [40, 40],
+            "ortho_h": [-5.0, 0.2],
+        }
+    )
 
 def test_data_request_defaults():
     """
@@ -43,7 +66,11 @@ def test_data_request_defaults():
     assert req.variables_atl03 is None
     assert req.variables_atl24 is None
     assert req.options == {}
+    
     assert req.photons is None
+    assert req.metadata == {}
+    assert req.sources == []
+    assert req.products == []
 
 
 """
@@ -170,9 +197,7 @@ def test_build_atl03_params_basic(basic_request):
         "geoid",
     ]
     assert params["atl09_fields"] == [
-        "bckgrd_atlas/bckgrd_counts",
-        "bckgrd_atlas/bckgrd_counts_reduced",
-        "bckgrd_atlas/bckgrd_rate",
+        "high_rate/backg_c",
     ]
 
     assert "output" not in params
@@ -220,3 +245,175 @@ def test_build_atl03_params_does_not_add_gebco(basic_request, tmp_path):
     params = basic_request.build_atl03_params()
 
     assert "samples" not in params
+
+def test_get_atl03_data_calls_sliderule_run(
+    monkeypatch,
+    basic_request,
+    fake_atl03_photons,
+):
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.output = None
+
+    calls = []
+
+    def fake_run(api, params):
+        calls.append({"api": api, "parms": params})
+        return fake_atl03_photons
+
+    monkeypatch.setattr(
+        "aok.core.acquisition.base.sliderule.run",
+        fake_run,
+    )
+
+    photons = basic_request.get_atl03_data()
+
+    assert photons is fake_atl03_photons
+    assert len(calls) == 1
+    assert calls[0]["api"] == "atl03x"
+    assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
+    assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
+
+def test_get_atl24_data_calls_sliderule_run(
+    monkeypatch,
+    basic_request,
+    fake_atl24_photons,
+):
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.output = None
+
+    calls = []
+
+    def fake_run(api, params):
+        calls.append({"api": api, "parms": params})
+        return fake_atl24_photons
+
+    monkeypatch.setattr(
+        "aok.core.acquisition.base.sliderule.run",
+        fake_run,
+    )
+
+    photons = basic_request.get_atl24_data()
+
+    assert photons is fake_atl24_photons
+    assert len(calls) == 1
+    assert calls[0]["api"] == "atl24x"
+    assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
+    assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
+
+def test_merge_photons_left_joins_atl24_to_atl03(
+    basic_request,
+    fake_atl03_photons,
+    fake_atl24_photons,
+):
+    merged = basic_request._merge_photons(
+        atl03_photons=fake_atl03_photons,
+        atl24_photons=fake_atl24_photons,
+    )
+
+    assert list(merged["time_ns"]) == [1, 2, 3]
+    assert list(merged["height"]) == [10.0, 20.0, 30.0]
+    assert list(merged["atl03_cnf"]) == [1, 0, 4]
+    assert merged.loc[0, "ortho_h"] == -5.0
+    assert merged.loc[2, "ortho_h"] == 0.2
+    assert "x_atc_atl24" in merged.columns
+
+def test_merge_photons_requires_time_ns_in_atl03(
+    basic_request,
+    fake_atl24_photons,
+):
+    atl03 = pd.DataFrame({"height": [10.0, 20.0]})
+
+    with pytest.raises(
+        ValueError,
+        match="ATL03 photons are missing 'time_ns'",
+    ):
+        basic_request._merge_photons(
+            atl03_photons=atl03,
+            atl24_photons=fake_atl24_photons,
+        )
+def test_merge_photons_requires_time_ns_in_atl24(
+    basic_request,
+    fake_atl03_photons,
+):
+    atl24 = pd.DataFrame({"class_ph": [40, 41]})
+
+    with pytest.raises(
+        ValueError,
+        match="ATL24 photons are missing 'time_ns'",
+    ):
+        basic_request._merge_photons(
+            atl03_photons=fake_atl03_photons,
+            atl24_photons=atl24,
+        )
+
+def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
+    monkeypatch,
+    basic_request,
+    fake_atl03_photons,
+    fake_atl24_photons,
+):
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.output = None
+    basic_request.need_atl03 = True
+    basic_request.need_atl24 = True
+
+    init_calls = []
+    run_calls = []
+
+    def fake_init(slidrule_url):
+        init_calls.append(slidrule_url)
+
+    def fake_run(api, params):
+        run_calls.append({"api": api, "parms": params})
+    
+        if api == "atl03x":
+            return fake_atl03_photons
+    
+        if api == "atl24x":
+            return fake_atl24_photons
+    
+        raise AssertionError(f"Unexpected SlideRule API: {api}")
+
+    monkeypatch.setattr(
+        "aok.core.acquisition.base.sliderule.init",
+        fake_init,
+    )
+    monkeypatch.setattr(
+        "aok.core.acquisition.base.sliderule.run",
+        fake_run,
+    )
+
+    result = basic_request.get_sliderule_data()
+
+    assert result is basic_request
+
+    assert init_calls == ["slideruleearth.io"]
+    assert [call["api"] for call in run_calls] == ["atl03x", "atl24x"]
+
+    assert basic_request.photons is not None
+    assert list(basic_request.photons["time_ns"]) == [1, 2, 3]
+    assert "x_atc" in basic_request.photons.columns
+    assert "height" in basic_request.photons.columns
+    assert "class_ph" in basic_request.photons.columns
+    assert "x_atc_atl24" in basic_request.photons.columns
+    assert list(basic_request.photons["class_ph"].isna()) == [False, True, False]
+
+    assert basic_request.products == ["ATL03", "ATL24"]
+    assert basic_request.sources == ["sliderule", "sliderule"]
+
+    assert basic_request.metadata["ATL03"]["request_type"] == "atl03"
+    assert basic_request.metadata["ATL03"]["n_rows"] == 3
+    assert basic_request.metadata["ATL03"]["columns"] == [
+        "time_ns",
+        "x_atc",
+        "height",
+        "atl03_cnf",
+    ]
+    assert basic_request.metadata["ATL24"]["request_type"] == "atl24"
+    assert basic_request.metadata["ATL24"]["n_rows"] == 2
+    assert basic_request.metadata["ATL24"]["columns"] == [
+        "time_ns",
+        "x_atc",
+        "class_ph",
+        "ortho_h",
+    ]
