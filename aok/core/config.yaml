@@ -1,0 +1,26 @@
+# ICESat-2 Kd Computation Configuration File
+
+# Output resolution settings
+horizontal_res: 500  # meters
+vertical_res: 0.25  # meters ??? what is this?
+
+# Analysis parameters
+# ???
+subsurface_thresh: 1.0  # threshold for photons below sea surface
+ignore_subsurface_height_thres: -6  # maximum depth threshold for Kd calculations (meters)
+
+# Solar background (bg)
+solar_bg_filter: true
+solar_elev_threshold: 6.0  # degrees
+solar_bg_median_window_deg: 10.0  # degrees of solar elevation
+solar_bg_noise_multiplier: 1.5  # ratio of actual/expected background rate
+solar_bg_min_signal_conf: 2  # minimum photon signal confidence
+
+# Decay zone detection
+decay_zone_threshold: 0.0  # fraction of peak photon count
+
+# Kd fitting method
+kd_fit_method: "log_linear"  # choices: log_linear, bg_subtract, breakpoint, nonlinear, hybrid
+
+# Plotting
+generate_plots: false

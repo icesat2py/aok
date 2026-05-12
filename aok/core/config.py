@@ -78,23 +78,35 @@ def get_args():
         help="Root path for all data processing.",
     )
 
-    # parser.add_argument("--atl03_path", type=str, default='Dataset/ATL03_ICESat2/New/',
-    #                     help="Base path for ICESat-2 ATL03 data.")
+    parser.add_argument(
+        "--atl03_path",
+        type=str,
+        default="/Users/jessica/computing/icesat2py/aok/doc/source/example_notebooks/test_data/",
+        help="Base path for ICESat-2 ATL03 data.",
+    )
 
     # # Bohai Sea (v006)
     # parser.add_argument("--atl03_path", type=str, default='Dataset/ATL03_ICESat2/',
     #                     help="Base path for ICESat-2 ATL03 data.")
 
     # Wax Delta (v007) — required for IR/AP filter sensitivity test
+    # parser.add_argument(
+    #     "--atl03_path",
+    #     type=str,
+    #     default="Dataset/ATL03_ICESat2/Wax_Delta/",
+    #     help="Base path for ICESat-2 ATL03 data.",
+    # )
+
+    # Cook Inlet
     parser.add_argument(
-        "--atl03_path",
+        "--atl03_file",
         type=str,
-        default="Dataset/ATL03_ICESat2/Wax_Delta/",
-        help="Base path for ICESat-2 ATL03 data.",
+        default="188554640_ATL03_20250821014853_10132803_007_01_subsetted.h5",
+        help="Name of the ATL03 H5 file to process.",
     )
 
     # #ChesapeakeBay
-    # parser.add_argument("--atl03_file", type=str, default="processed_ATL03_20230825074121_10102002_006_02.h5",
+    # parser.add_argument("--atl03_file", type=str, default="188296844_ATL03_20181022081006_03620106_007_01_subsetted.h5",
     #                     help="Name of the ATL03 H5 file to process.")
 
     # parser.add_argument("--atl03_file", type=str, default="processed_ATL03_20221001113813_01641706_006_01.h5",
@@ -117,13 +129,13 @@ def get_args():
     # parser.add_argument("--atl03_file", type=str, default="ATL03_20190829161305_09560402_006_02_subsetted.h5",
     #                     help="Name of the ATL03 H5 file to process.")
 
-    # Wax Delta (v007) — required for IR/AP filter; use with atl03_path = Dataset/ATL03_ICESat2/Wax_Delta/
-    parser.add_argument(
-        "--atl03_file",
-        type=str,
-        default="ATL03_20231103172707_06982106_007_01_subsetted.h5",
-        help="Name of the ATL03 H5 file to process.",
-    )
+    # # Wax Delta (v007) — required for IR/AP filter; use with atl03_path = Dataset/ATL03_ICESat2/Wax_Delta/
+    # parser.add_argument(
+    #     "--atl03_file",
+    #     type=str,
+    #     default="ATL03_20231103172707_06982106_007_01_subsetted.h5",
+    #     help="Name of the ATL03 H5 file to process.",
+    # )
 
     # # Cook Inlet
     # parser.add_argument("--atl03_file", type=str, default="ATL03_20220507112145_06931503_006_01_subsetted.h5",

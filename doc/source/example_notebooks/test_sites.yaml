@@ -1,4 +1,14 @@
 locations:
+- name: chesapeake_bay
+  RGT: null
+  filename: ATL03_20181022081006_03620106_007_01.h5
+  dates:
+    start: '2018-10-22'
+    end: '2018-10-26'
+  spatial_extent:
+    bbox: [-77.54, 36.66, -74.58, 39.63]
+    latlon: null
+    buffer: null
 - name: core_sound_nc
   RGT: '0484'
   filename: null
@@ -244,7 +254,7 @@ locations:
   filename: null
   dates:
     start: '2025-08-21'
-    end: '2025-08-21'
+    end: '2025-08-22'
   spatial_extent:
     bbox:
     - -150.622053

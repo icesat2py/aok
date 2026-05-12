@@ -6,7 +6,6 @@ import pytest
 from aok.core.acquisition.base import DataRequest
 from aok.tests.column_requirements import REQUIRED_ATL03_COLUMNS
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -14,6 +13,7 @@ requires_sliderule = pytest.mark.skipif(
     os.getenv("RUN_SLIDERULE_INTEGRATION") != "1",
     reason="Set RUN_SLIDERULE_INTEGRATION=1 to run SlideRule integration tests.",
 )
+
 
 def dataframe_has_field(df: pd.DataFrame, field: str) -> bool:
     """
@@ -32,25 +32,20 @@ def missing_required_fields(
     """
     Return required fields that are missing from both columns and the index.
     """
-    return {
-        field
-        for field in required_fields
-        if not dataframe_has_field(df, field)
-    }
-
+    return {field for field in required_fields if not dataframe_has_field(df, field)}
 
 
 @requires_sliderule
 def test_sliderule_real_atl03_request_returns_photons():
     request = DataRequest(
         spatial=[
-            {'lon': -76.319707, 'lat': 34.895786},
-            {'lon': -76.210123, 'lat': 34.895786},
-            {'lon': -76.210123, 'lat': 34.985618},
-            {'lon': -76.319707, 'lat': 34.985618},
-            {'lon': -76.319707, 'lat': 34.895786}
+            {"lon": -76.319707, "lat": 34.895786},
+            {"lon": -76.210123, "lat": 34.895786},
+            {"lon": -76.210123, "lat": 34.985618},
+            {"lon": -76.319707, "lat": 34.985618},
+            {"lon": -76.319707, "lat": 34.895786},
         ],
-        date_range=('2022-04-23', '2022-04-23'),
+        date_range=("2022-04-23", "2022-04-23"),
         output=None,
         need_atl03=True,
         need_atl24=False,
@@ -71,10 +66,10 @@ def test_sliderule_real_atl03_request_returns_photons():
     assert "ATL03" in request.metadata
     assert request.metadata["ATL03"]["request_type"] == "atl03"
     assert request.metadata["ATL03"]["n_rows"] == len(request.photons)
-    
-    assert dataframe_has_field(request.photons, "time_ns"), (
-        "Expected time_ns to exist either as a column or as the dataframe index."
-    )
+
+    assert dataframe_has_field(
+        request.photons, "time_ns"
+    ), "Expected time_ns to exist either as a column or as the dataframe index."
 
     missing_fields = missing_required_fields(
         request.photons,
