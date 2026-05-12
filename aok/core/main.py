@@ -117,7 +117,7 @@ def run_pipeline(args: KdConfig):
     # gebco_pattern = os.path.join(gebco_full_path, "gebco_*.tif")
     # gebco_file_path_lists = [p for p in glob.glob(gebco_pattern)]
 
- 
+
     ### GET DATA
     # Place to insert sliderule into code
 
@@ -285,7 +285,7 @@ def run_pipeline(args: KdConfig):
     #             kd_df_merged_distance,
     #         )
 
-    
+
     logger.info("SUCCESS! Kd output: %s", kd_output_path)
 
 

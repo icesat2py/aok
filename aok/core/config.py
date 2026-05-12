@@ -78,8 +78,12 @@ def get_args():
         help="Root path for all data processing.",
     )
 
-    parser.add_argument("--atl03_path", type=str, default="/Users/jessica/computing/icesat2py/aok/doc/source/example_notebooks/test_data/",
-                        help="Base path for ICESat-2 ATL03 data.")
+    parser.add_argument(
+        "--atl03_path",
+        type=str,
+        default="/Users/jessica/computing/icesat2py/aok/doc/source/example_notebooks/test_data/",
+        help="Base path for ICESat-2 ATL03 data.",
+    )
 
     # # Bohai Sea (v006)
     # parser.add_argument("--atl03_path", type=str, default='Dataset/ATL03_ICESat2/',
@@ -93,9 +97,13 @@ def get_args():
     #     help="Base path for ICESat-2 ATL03 data.",
     # )
 
-    #Cook Inlet
-    parser.add_argument("--atl03_file", type=str, default="188554640_ATL03_20250821014853_10132803_007_01_subsetted.h5",
-                        help="Name of the ATL03 H5 file to process.")
+    # Cook Inlet
+    parser.add_argument(
+        "--atl03_file",
+        type=str,
+        default="188554640_ATL03_20250821014853_10132803_007_01_subsetted.h5",
+        help="Name of the ATL03 H5 file to process.",
+    )
 
     # #ChesapeakeBay
     # parser.add_argument("--atl03_file", type=str, default="188296844_ATL03_20181022081006_03620106_007_01_subsetted.h5",

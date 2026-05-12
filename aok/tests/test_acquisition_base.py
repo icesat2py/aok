@@ -1,13 +1,11 @@
-from datetime import datetime
-
 import pandas as pd
 import pytest
 
 from aok.core.acquisition.base import DataRequest
 from aok.tests.column_requirements import (
     REQUIRED_ATL03_COLUMNS,
-    REQUIRED_GEBCO_COLUMNS,
     REQUIRED_ATL24_COLUMNS,
+    REQUIRED_GEBCO_COLUMNS,
 )
 
 
@@ -25,13 +23,11 @@ def basic_request():
         spatial=srextent,
     )
 
+
 @pytest.fixture
 def fake_atl03_photons():
     photons = pd.DataFrame(
-        {
-            column: [None, None, None]
-            for column in REQUIRED_ATL03_COLUMNS
-        }
+        {column: [None, None, None] for column in REQUIRED_ATL03_COLUMNS}
     )
 
     photons["time_ns"] = [1, 2, 3]
@@ -40,6 +36,7 @@ def fake_atl03_photons():
     photons["atl03_cnf"] = [1, 0, 4]
 
     return photons.set_index("time_ns")
+
 
 @pytest.fixture
 def fake_atl03_photons_with_gebco(fake_atl03_photons):
@@ -51,20 +48,17 @@ def fake_atl03_photons_with_gebco(fake_atl03_photons):
 
     return photons
 
+
 @pytest.fixture
 def fake_atl24_photons():
-    photons = pd.DataFrame(
-        {
-            column: [None, None]
-            for column in REQUIRED_ATL24_COLUMNS
-        }
-    )
+    photons = pd.DataFrame({column: [None, None] for column in REQUIRED_ATL24_COLUMNS})
     photons["time_ns"] = [1, 3]
     photons["x_atc"] = [0.0, 3.0]
     photons["class_ph"] = [40, 40]
     photons["ortho_h"] = [-5.0, 0.2]
-    
+
     return photons.set_index("time_ns")
+
 
 def test_data_request_defaults():
     """
@@ -88,7 +82,7 @@ def test_data_request_defaults():
     assert req.variables_atl03 is None
     assert req.variables_atl24 is None
     assert req.options == {}
-    
+
     assert req.photons is None
     assert req.metadata == {}
     assert req.sources == []
@@ -268,20 +262,20 @@ def test_build_atl03_params_does_not_add_gebco(basic_request, tmp_path):
 
     assert "samples" not in params
 
+
 def test_atl03_photons_with_gebco_have_required_columns(
     fake_atl03_photons_with_gebco,
 ):
     required_columns = REQUIRED_ATL03_COLUMNS.union(REQUIRED_GEBCO_COLUMNS)
 
-    missing_columns = required_columns.difference(
-        fake_atl03_photons_with_gebco.columns
-    )
+    missing_columns = required_columns.difference(fake_atl03_photons_with_gebco.columns)
 
     assert not missing_columns, (
         "ATL03 photons with GEBCO are missing required columns: "
         f"{sorted(missing_columns)}"
     )
-    
+
+
 def test_get_atl03_data_calls_sliderule_run(
     monkeypatch,
     basic_request,
@@ -343,9 +337,7 @@ def test_get_sliderule_data_with_gebco_records_gebco_columns(
     assert result is basic_request
     assert basic_request.photons is fake_atl03_photons_with_gebco
 
-    missing_columns = REQUIRED_GEBCO_COLUMNS.difference(
-        basic_request.photons.columns
-    )
+    missing_columns = REQUIRED_GEBCO_COLUMNS.difference(basic_request.photons.columns)
     assert not missing_columns, (
         "GEBCO-enabled ATL03 result is missing GEBCO columns: "
         f"{sorted(missing_columns)}"
@@ -356,6 +348,7 @@ def test_get_sliderule_data_with_gebco_records_gebco_columns(
     assert set(basic_request.metadata["ATL03"]["columns"]) == set(
         fake_atl03_photons_with_gebco.columns
     )
+
 
 def test_get_atl24_data_calls_sliderule_run(
     monkeypatch,
@@ -384,6 +377,7 @@ def test_get_atl24_data_calls_sliderule_run(
     assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
     assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
 
+
 def test_merge_photons_left_joins_atl24_to_atl03(
     basic_request,
     fake_atl03_photons,
@@ -402,6 +396,7 @@ def test_merge_photons_left_joins_atl24_to_atl03(
     assert merged.loc[3, "ortho_h"] == 0.2
     assert "x_atc_atl24" in merged.columns
 
+
 def test_merge_photons_requires_time_ns_in_atl03(
     basic_request,
     fake_atl24_photons,
@@ -416,6 +411,8 @@ def test_merge_photons_requires_time_ns_in_atl03(
             atl03_photons=atl03,
             atl24_photons=fake_atl24_photons,
         )
+
+
 def test_merge_photons_requires_time_ns_in_atl24(
     basic_request,
     fake_atl03_photons,
@@ -430,6 +427,7 @@ def test_merge_photons_requires_time_ns_in_atl24(
             atl03_photons=fake_atl03_photons,
             atl24_photons=atl24,
         )
+
 
 def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     monkeypatch,
@@ -450,13 +448,13 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
 
     def fake_run(api, params):
         run_calls.append({"api": api, "parms": params})
-    
+
         if api == "atl03x":
             return fake_atl03_photons
-    
+
         if api == "atl24x":
             return fake_atl24_photons
-    
+
         raise AssertionError(f"Unexpected SlideRule API: {api}")
 
     monkeypatch.setattr(
@@ -495,4 +493,4 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert basic_request.metadata["ATL24"]["n_rows"] == 2
     assert set(basic_request.metadata["ATL24"]["columns"]) == set(
         fake_atl24_photons.columns
-        )
+    )

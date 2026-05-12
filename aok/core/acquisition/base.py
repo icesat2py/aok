@@ -1,28 +1,31 @@
 # contains classes for data input objects and data output objects after aquisition from the cloud.
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 import warnings
-import pandas as pd
+
 import geopandas as gpd
-from sliderule import sliderule, icesat2 
-#from aok.core.kd_utils.data_processing import 
+import pandas as pd
+from sliderule import sliderule
+
+# from aok.core.kd_utils.data_processing import
+
 
 @dataclass
 class DataRequest:
     """
     Backend request object describing what data should be acquired.
-    
+
     DataRequest stores the user's requested spatial, temporal, product, and
     output options in a shared format. It provides methods for building SlideRule
     request parameters, fetching ATL03 and/or ATL24 data, optionally merging those
     datasets, and storing the final photon table on the request object itself.
-    
+
     The final acquired dataset is stored in `photons`. If both ATL03 and ATL24 are
     requested, ATL03 is treated as the left-hand photon table and ATL24 attributes
     are merged onto it using `time_ns`. If only one product is requested, that
     product's photon table is stored directly in `photons`.
-    
+
     Request attributes
     ------------------
     spatial
@@ -42,7 +45,7 @@ class DataRequest:
     download_dir
         Directory where SlideRule output files should be written when file output
         is requested.
-    
+
     Product flags
     -------------
     need_atl03
@@ -57,7 +60,7 @@ class DataRequest:
     need_jpl_temperature
         Whether JPL sea surface temperature data should be requested. This behavior
         is not implemented yet.
-    
+
     Product options
     ---------------
     version_atl03
@@ -73,7 +76,7 @@ class DataRequest:
     options
         Additional keyword-style options passed through to the relevant acquisition
         parameter builder.
-    
+
     Result attributes
     -----------------
     photons
@@ -87,7 +90,7 @@ class DataRequest:
         List of acquisition sources used to create the final photon table.
     products
         List of products included in the final photon table.
-        """
+    """
 
     spatial: Any | None = None
     date_range: tuple[str, str] | None = None
@@ -111,7 +114,7 @@ class DataRequest:
     shoreline_data: Path | None = None
 
     options: dict[str, Any] = field(default_factory=dict)
-    
+
     # outputs
     photons: gpd.GeoDataFrame | pd.DataFrame | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -196,15 +199,15 @@ class DataRequest:
                 raise ValueError(
                     "download_dir is required when output format is specified."
                 )
-                
+
             download_dir = Path(self.download_dir).expanduser().resolve(strict=False)
             download_dir.mkdir(parents=True, exist_ok=True)
-            
+
             if geoparquet_name is None:
                 geoparquet_name = "kdOutputAsGeo.geoparquet"
 
             output_path = (download_dir / Path(geoparquet_name)).resolve(strict=False)
-            
+
             return {
                 "path": str(output_path),
                 "format": "parquet",
@@ -321,7 +324,7 @@ class DataRequest:
         }  # height above WGS-84 ref ellipsoid
 
         params.update(atl03_geophys_corr)
-        
+
         # per email with atl09 folks, backg_c is the background rate
         params["atl09_fields"] = [
             "high_rate/backg_c",
@@ -365,8 +368,7 @@ class DataRequest:
             "poly": self.spatial,
             "t0": t0,
             "t1": t1,
-            "atl24": {"class_ph": ["bathymetry", "sea_surface"],
-                     "compact": False },
+            "atl24": {"class_ph": ["bathymetry", "sea_surface"], "compact": False},
         }
 
         output_params = self._sliderule_output_params("atl24_output.parquet")
@@ -397,29 +399,29 @@ class DataRequest:
     ) -> pd.DataFrame:
         """
         Merge ATL24 photon information onto ATL03 photons using time_ns.
-    
+
         ATL03 is treated as the left-most dataframe. The merged result preserves
         ATL03 row order and preserves time_ns as the index when ATL03 uses time_ns
         as its index.
         """
         atl03_has_time_ns_index = atl03_photons.index.name == "time_ns"
         atl24_has_time_ns_index = atl24_photons.index.name == "time_ns"
-    
+
         atl03_has_time_ns_column = "time_ns" in atl03_photons.columns
         atl24_has_time_ns_column = "time_ns" in atl24_photons.columns
-    
+
         if not atl03_has_time_ns_index and not atl03_has_time_ns_column:
             raise ValueError(
                 "Cannot merge photons: ATL03 photons are missing 'time_ns' "
                 "as both a column and an index."
             )
-    
+
         if not atl24_has_time_ns_index and not atl24_has_time_ns_column:
             raise ValueError(
                 "Cannot merge photons: ATL24 photons are missing 'time_ns' "
                 "as both a column and an index."
             )
-    
+
         if atl03_has_time_ns_index and atl24_has_time_ns_index:
             merged = atl03_photons.merge(
                 atl24_photons,
@@ -428,7 +430,7 @@ class DataRequest:
                 how="left",
                 suffixes=("", "_atl24"),
             )
-    
+
         elif atl03_has_time_ns_index and atl24_has_time_ns_column:
             merged = atl03_photons.merge(
                 atl24_photons,
@@ -437,7 +439,7 @@ class DataRequest:
                 how="left",
                 suffixes=("", "_atl24"),
             ).set_index("time_ns")
-    
+
         elif atl03_has_time_ns_column and atl24_has_time_ns_index:
             merged = atl03_photons.merge(
                 atl24_photons,
@@ -446,7 +448,7 @@ class DataRequest:
                 how="left",
                 suffixes=("", "_atl24"),
             )
-    
+
         else:
             merged = atl03_photons.merge(
                 atl24_photons,
@@ -454,32 +456,32 @@ class DataRequest:
                 how="left",
                 suffixes=("", "_atl24"),
             )
-    
+
         if isinstance(atl03_photons, gpd.GeoDataFrame):
             merged = gpd.GeoDataFrame(
                 merged,
                 geometry=atl03_photons.geometry.name,
                 crs=atl03_photons.crs,
             )
-    
+
         return merged
 
     def get_sliderule_data(self) -> "DataRequest":
         """
-        Use sliderule to get data from all sources and return 
+        Use sliderule to get data from all sources and return
         as a list of aquisition results
-       
+
         """
         self.validate()
         sliderule.init("slideruleearth.io")
-    
+
         atl03_photons = None
         atl24_photons = None
 
         self.products = []
         self.sources = []
         self.metadata = {}
-    
+
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
             self.products.append("ATL03")
@@ -489,7 +491,7 @@ class DataRequest:
                 "n_rows": len(atl03_photons),
                 "columns": list(atl03_photons.columns),
             }
-    
+
         if self.need_atl24:
             atl24_photons = self.get_atl24_data()
             self.products.append("ATL24")
@@ -499,7 +501,7 @@ class DataRequest:
                 "n_rows": len(atl24_photons),
                 "columns": list(atl24_photons.columns),
             }
-    
+
         if atl03_photons is not None and atl24_photons is not None:
             self.photons = self._merge_photons(
                 atl03_photons=atl03_photons,
@@ -511,7 +513,7 @@ class DataRequest:
             self.photons = atl24_photons
         else:
             self.photons = None
-        
+
         return self
 
     # variables I appear to need for icephotons dataset
