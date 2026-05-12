@@ -1,8 +1,3 @@
-## NEXT STEPS
-# begin modifying main.py to use the yaml file
-# merge this branch into Hannah's so we can both work on the "new" main.py
-# continue working on a branch that I rebase onto hers until we have new version in
-
 from dataclasses import dataclass
 import logging
 import os

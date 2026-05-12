@@ -74,7 +74,7 @@ def get_args():
     parser.add_argument(
         "--workspace_path",
         type=str,
-        default="/Users/jessica/computing/icesat2py/aok/doc/source/example_notebooks/test_data/",
+        default=".",
         help="Root path for all data processing.",
     )
 
