@@ -73,6 +73,8 @@ class DataRequest:
         Optional additional ATL24 fields.
     shoreline_data
         Optional path to shoreline data used for future spatial filtering.
+    land_ocean_mask
+        Optional path to land-ocean mask used for creating a shoreline mask
     options
         Additional keyword-style options passed through to the relevant acquisition
         parameter builder.
@@ -112,6 +114,7 @@ class DataRequest:
     variables_atl24: list[str] | None = None
 
     shoreline_data: Path | None = None
+    land_ocean_mask: Path | None = None
 
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -261,7 +264,7 @@ class DataRequest:
 
         """
         # Pause on implementing shoreline data until later;
-        if self.shoreline is :
+        if self.need_shoreline:
             # create a region mask with sliderule.toregion
             sliderule.toregion(self.spatial, raster)
 
@@ -275,7 +278,7 @@ class DataRequest:
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
             "cnf": [0, 1, 2, 3, 4],
-            "quality_ph": [0],
+            "quality_ph": [0], # replaces ir/ap filter
         }
 
         ## Now adding required auxillary fields
