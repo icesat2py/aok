@@ -6,6 +6,8 @@ import warnings
 
 import geopandas as gpd
 import pandas as pd
+
+import icepyx as ipx
 from sliderule import sliderule
 
 # from aok.core.kd_utils.data_processing import
@@ -98,7 +100,7 @@ class DataRequest:
     date_range: tuple[str, str] | None = None
     time_range: tuple[str, str] | None = None
     beams: list[str] | None = None
-    output: OutputType = "dataframe"
+    output: str = "dataframe"  # transitioned from OutputType to str, because OutputType was undefined
     download_dir: Path | None = None  # HANNAH check if properly specified
 
     need_atl03: bool = True

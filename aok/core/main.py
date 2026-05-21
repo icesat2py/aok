@@ -1,20 +1,24 @@
 from dataclasses import dataclass
 import logging
 import os
+from pathlib import Path
 import re
+
 import yaml
 
 # clean these up once it's determined which functions are called or not
-from kd_utils.bathy_processing import process_subsurface_photon_filtering
-from kd_utils.data_processing import (
+from aok.core.acquisition.base import DataRequest
+
+from .kd_utils.bathy_processing import process_subsurface_photon_filtering
+from .kd_utils.data_processing import (
     Extract_sea_photons,
     apply_optional_ir_ap_filter,
     apply_optional_solar_background_filter,
     filter_photon_dataset_by_hull_area,
 )
-from kd_utils.Kd_analysis import process_kd_calculation
-from kd_utils.sea_photons_analysis import process_sea_photon_binning
-from kd_utils.visualization import (
+from .kd_utils.Kd_analysis import process_kd_calculation
+from .kd_utils.sea_photons_analysis import process_sea_photon_binning
+from .kd_utils.visualization import (
     plot_convex_hulls,
     plot_kd_photons,
     plot_photon_quality_flags,
@@ -42,13 +46,19 @@ class KdConfig:
     generate_plots: bool
 
 
-def get_args(config_path: str = "config.yaml") -> KdConfig:
+def get_args(config_path: str | None = None) -> KdConfig:
+    if config_path is None:
+        # Look for config.yaml in the same directory as main.py
+        config_path = Path(__file__).parent / "config.yaml"
+    else:
+        config_path = Path(config_path)
+    
     with open(config_path, "r") as f:
         raw_config = yaml.safe_load(f)
 
-    # Support config.yaml containing gebco_path as either a string or list.
-    if isinstance(raw_config.get("gebco_path"), list):
-        raw_config["gebco_path"] = raw_config["gebco_path"][0]
+    # # Support config.yaml containing gebco_path as either a string or list.
+    # if isinstance(raw_config.get("gebco_path"), list):
+    #     raw_config["gebco_path"] = raw_config["gebco_path"][0]
 
     return KdConfig(**raw_config)
 
@@ -112,9 +122,13 @@ def run_pipeline(args: KdConfig):
     # gebco_pattern = os.path.join(gebco_full_path, "gebco_*.tif")
     # gebco_file_path_lists = [p for p in glob.glob(gebco_pattern)]
 
-
+ 
     ### GET DATA
     # Place to insert sliderule into code
+
+
+
+
 
     sea_photon_dataset = Extract_sea_photons(
         is2_mds, target_strong_beams, shoreline_data_path
@@ -130,7 +144,7 @@ def run_pipeline(args: KdConfig):
         # enabled=args.enable_ir_ap_filter,
         # quality_max=args.ir_ap_quality_max,
         # min_signal_conf=args.ir_ap_min_signal_conf,
-    )
+    # )
 
     # Step 5 — Solar background filter is ON by default.
     # It self-gates on solar_elevation so has zero effect on nighttime passes.
@@ -280,7 +294,7 @@ def run_pipeline(args: KdConfig):
     #             kd_df_merged_distance,
     #         )
 
-
+    
     logger.info("SUCCESS! Kd output: %s", kd_output_path)
 
 

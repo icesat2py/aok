@@ -1,5 +1,8 @@
 # ICESat-2 Kd Computation Configuration File
 
+# Output files settings
+output_path: "./results/"
+
 # Output resolution settings
 horizontal_res: 500  # meters
 vertical_res: 0.25  # meters ??? what is this?
