@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
 import re
 
+from pydantic import BaseModel
 import yaml
 
 # clean these up once it's determined which functions are called or not
@@ -29,8 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@dataclass
-class KdConfig:
+class KdConfig(BaseModel):
     output_path: str
     horizontal_res: int
     vertical_res: float
@@ -44,6 +43,8 @@ class KdConfig:
     decay_zone_threshold: float
     kd_fit_method: str
     generate_plots: bool
+
+    model_config = {"validate_assignment": True} # checks typing if a user interactively changes a config value
 
 
 def get_args(config_path: str | None = None) -> KdConfig:
