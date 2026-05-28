@@ -9,6 +9,7 @@ import yaml
 
 # clean these up once it's determined which functions are called or not
 from aok.core.acquisition.base import DataRequest
+from sliderule import sliderule, icesat2
 
 from .kd_utils.bathy_processing import process_subsurface_photon_filtering
 from .kd_utils.data_processing import (
