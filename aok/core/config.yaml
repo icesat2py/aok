@@ -2,8 +2,14 @@
 
 # Define spatial and temporal extent
 # NOTE: leave these defaults if you'd like to enter extent from a Jupyter Notebook
-spatial: [0,0,0,0]
-temporal: ["2000-01-01", "2000-01-01"]
+#spatial: [0,0,0,0]
+spatial: [-150.622053, 61.045382, -150.361757, 61.171146]
+#temporal: ["2000-01-01", "2000-01-01"]
+temporal: ['2025-08-21', '2025-08-22']
+
+# atl03 version (optional)
+#atl03_version: None
+
 
 # Output files settings
 output_path: "./results/"

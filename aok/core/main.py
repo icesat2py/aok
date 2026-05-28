@@ -46,6 +46,7 @@ class KdConfig(BaseModel):
     solar_bg_min_signal_conf: int
     spatial: list[float]
     temporal: list[datetime | str]
+    atl03_version: str | None
     decay_zone_threshold: float
     kd_fit_method: str
     generate_plots: bool
@@ -53,10 +54,10 @@ class KdConfig(BaseModel):
     model_config = {"validate_assignment": True} # checks typing if a user interactively changes a config value
 
 # TODO: fill in these guardrails
-def check_config_values(KdConfig):
-    assert KdConfig.spatial != [0,0,0,0]
-    assert KdConfig.temporal != ["2000-01-01", "2000-01-01"]
-    assert KdConfig.horizontal_res < 3000
+def check_config_values(config: KdConfig):
+    assert config.spatial != [0,0,0,0]
+    assert config.temporal != ["2000-01-01", "2000-01-01"]
+    assert config.horizontal_res < 3000
 
 def get_args(config_path: str | None = None) -> KdConfig:
     if config_path is None:
@@ -64,7 +65,6 @@ def get_args(config_path: str | None = None) -> KdConfig:
         config_path = Path(__file__).parent / "config.yaml"
     else:
         config_path = Path(config_path)
-    
     with open(config_path, "r") as f:
         raw_config = yaml.safe_load(f)
 
@@ -108,20 +108,20 @@ def run_pipeline(args: KdConfig):
     # args.output_path = os.path.join(args.workspace_path, args.args.output_path)
     # os.makedirs(args.output_path, exist_ok=True)
 
-    check_config_values(KdConfig)
+    check_config_values(args)
 
-    ### can we get the version from SR directly?
-    match = re.search(r"_(\d{14})_", atl03_h5_file_path)
-    timestamp = match.group(1) if match else "unknown"
+    ### can we get the version from SR directly? - we can specify version when calling SR
+    #match = re.search(r"_(\d{14})_", atl03_h5_file_path)
+    #timestamp = match.group(1) if match else "unknown"
 
-    version_match = re.search(
-        r"ATL03_\d{14}_\d{8}_(\d{3})_\d{2}", os.path.basename(atl03_h5_file_path)
-    )
-    atl03_version = int(version_match.group(1)) if version_match else None
-    logger.info(
-        "ATL03 version detected: %s",
-        f"{atl03_version:03d}" if atl03_version else "unknown",
-    )
+    #version_match = re.search(
+    #    r"ATL03_\d{14}_\d{8}_(\d{3})_\d{2}", os.path.basename(atl03_h5_file_path)
+    #)
+    #atl03_version = int(version_match.group(1)) if version_match else None
+    #logger.info(
+    #    "ATL03 version detected: %s",
+    #    f"{atl03_version:03d}" if atl03_version else "unknown",
+    #)
 
     # if args.enable_ir_ap_filter:
         # if atl03_version is None or atl03_version < 7:
@@ -141,10 +141,10 @@ def run_pipeline(args: KdConfig):
     # Place to insert sliderule into code
     # Sliderule request
     # pull spatial and temporal args from kdconfig
-    srregion = sliderule.toregion(source = KdConfig.spatial)
+    srregion = sliderule.toregion(source = args.spatial)
     temporal = [
-        datetime.fromisoformat(KdConfig.temporal[0]),
-        datetime.fromisoformat(KdConfig.temporal[1]),
+        datetime.fromisoformat(args.temporal[0]),
+        datetime.fromisoformat(args.temporal[1]),
     ]
     sea_photon_request = DataRequest(spatial=srregion["poly"],
                     date_range=(f'{temporal[0]:%Y-%m-%d}',
@@ -308,12 +308,13 @@ def run_pipeline(args: KdConfig):
     #             kd_df_merged_distance,
     #         )
 
-    
+
     logger.info("SUCCESS! Kd output: %s", kd_output_path)
 
 
 if __name__ == "__main__":
     kd_args = get_args()
+    print(get_args)
     try:
         run_pipeline(kd_args)
     except Exception as e:
