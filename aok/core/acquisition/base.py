@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 import warnings
-
+import logging
 import geopandas as gpd
 import pandas as pd
 
@@ -12,6 +12,7 @@ from sliderule import sliderule
 
 # from aok.core.kd_utils.data_processing import
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class DataRequest:
@@ -162,20 +163,6 @@ class DataRequest:
         t0 = f"{start_date}T{start_time}Z"
         t1 = f"{end_date}T{end_time}Z"
         return t0, t1
-
-    def _query_icepyx(self, product: str) -> ipx.Query:
-        """
-        Queries icepyx using the DataRequest product.
-        Not implemented yet. Draft implementation is below.
-        """
-
-        raise NotImplementedError("_query_icepyx exists but is not implemented yet.")
-        """
-        if product is None:
-            raise ValueError("IceSat2 product must be specified.")
-
-        return(ipx.Query(product, self.spatial, self.date_range, self.time_range))
-        """
 
     def _sliderule_output_params(
         self,
@@ -394,8 +381,35 @@ class DataRequest:
         return sliderule.run("atl03x", params)
 
     def get_atl24_data(self) -> pd.DataFrame:
+        """
+        Request ATL24 data from SlideRule.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            ATL24 dataframe if available. None if SlideRule cannot return ATL24
+            data for the request.
+        """
         params = self.build_atl24_params()
-        return sliderule.run("atl24x", params)
+
+        try:
+            atl24 = sliderule.run("atl24x", params)
+        except Exception as exc:
+            logger.warning(
+                "ATL24 data could not be retrieved from SlideRule for this request. "
+                "Continuing without ATL24 merge. Original error: %s",
+                exc,
+            )
+            return None
+
+        if atl24 is None or atl24.empty:
+            logger.warning(
+                "SlideRule returned no ATL24 data for this request. "
+                "Continuing without ATL24, gebco will be used instead."
+            )
+            return None
+
+        return atl24
 
     def _merge_photons(
         self,
@@ -499,13 +513,22 @@ class DataRequest:
 
         if self.need_atl24:
             atl24_photons = self.get_atl24_data()
-            self.products.append("ATL24")
-            self.sources.append("sliderule")
-            self.metadata["ATL24"] = {
-                "request_type": "atl24",
-                "n_rows": len(atl24_photons),
-                "columns": list(atl24_photons.columns),
-            }
+
+            if atl24_photons is not None:
+                self.products.append("ATL24")
+                self.sources.append("sliderule")
+                self.metadata["ATL24"] = {
+                    "request_type": "atl24",
+                    "n_rows": len(atl24_photons),
+                    "columns": list(atl24_photons.columns),
+                }
+            else:
+                self.metadata["ATL24"] = {
+                    "request_type": "atl24",
+                    "status": "unavailable",
+                    "n_rows": 0,
+                    "columns": [],
+                }
 
         if atl03_photons is not None and atl24_photons is not None:
             self.photons = self._merge_photons(
@@ -522,6 +545,8 @@ class DataRequest:
         return self
 
     # variables I appear to need for icephotons dataset
+
+    
     """
     # ATL03
     for each beam in beam list: beams from beam list
