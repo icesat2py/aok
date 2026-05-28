@@ -1,6 +1,7 @@
 
 geopandas
 h5py
+pydantic
 
 # Need to confirm which of these remain dependencies
 hdbscan
