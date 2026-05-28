@@ -142,9 +142,13 @@ def run_pipeline(args: KdConfig):
     # Sliderule request
     # pull spatial and temporal args from kdconfig
     srregion = sliderule.toregion(source = KdConfig.spatial)
+    temporal = [
+        datetime.fromisoformat(KdConfig.temporal[0]),
+        datetime.fromisoformat(KdConfig.temporal[1]),
+    ]
     sea_photon_request = DataRequest(spatial=srregion["poly"],
-                    date_range=(f'{KdConfig.temporal[0]:%Y-%m-%d}',
-                                f'{KdConfig.temporal[1]:%Y-%m-%d}'),
+                    date_range=(f'{temporal[0]:%Y-%m-%d}',
+                                f'{temporal[1]:%Y-%m-%d}'),
                     download_dir= "./test_data/")
     # initiate sliderule client
     sliderule.init("slideruleearth.io")
