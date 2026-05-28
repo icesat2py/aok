@@ -88,6 +88,7 @@ def run_pipeline(args: KdConfig):
       15 — Paired beam combine (optionally_combine_paired_beams_for_kd).
       16–17 — Beer's Law Kd fit (process_kd_calculation).
       18 — Save Kd CSV output (subsurface_photon_df_added_kd.to_csv).
+    KdConfig.spatial
       19 — Check data for reasonableness (filter_photon_dataset_by_hull_area +
            plot_kd_photons).
     """
@@ -135,40 +136,24 @@ def run_pipeline(args: KdConfig):
     # gebco_pattern = os.path.join(gebco_full_path, "gebco_*.tif")
     # gebco_file_path_lists = [p for p in glob.glob(gebco_pattern)]
 
- 
     ### GET DATA
     # Place to insert sliderule into code
-
-
-
-
-
-    sea_photon_dataset = Extract_sea_photons(
-        is2_mds, target_strong_beams, shoreline_data_path
-    )
-
-    # if args.enable_ir_ap_filter and not args.no_plot:
-        # plot_photon_quality_flags(
-        #     args.output_path, timestamp, sea_photon_dataset, plot_target_beam
-        # )
-
-    # sea_photon_dataset = apply_optional_ir_ap_filter(
-    #     sea_photon_dataset,
-        # enabled=args.enable_ir_ap_filter,
-        # quality_max=args.ir_ap_quality_max,
-        # min_signal_conf=args.ir_ap_min_signal_conf,
-    # )
-
-    # Sliderule request 
+    # Sliderule request
     # pull spatial and temporal args from kdconfig
+    srregion = sliderule.toregion(source = KdConfig.spatial)
     sea_photon_request = DataRequest(spatial=srregion["poly"],
-                    date_range=(f'{temporal[0]:%Y-%m-%d}', f'{temporal[1]:%Y-%m-%d}'), 
-                                     need_atl24 = False,
+                    date_range=(f'{KdConfig.temporal[0]:%Y-%m-%d}',
+                                f'{KdConfig.temporal[1]:%Y-%m-%d}'),
                     download_dir= "./test_data/")
     # initiate sliderule client
     sliderule.init("slideruleearth.io")
     sea_photon_request.get_sliderule_data()
     sea_photon_dataset = sea_photon_request.photons
+
+    # commenting out shoreline filtering in main
+    #sea_photon_dataset = Extract_sea_photons(
+    #    is2_mds, target_strong_beams, shoreline_data_path
+    #)
 
     # Step 5 — Solar background filter is ON by default.
     # It self-gates on solar_elevation so has zero effect on nighttime passes.
