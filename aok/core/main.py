@@ -31,9 +31,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # TODO: expand/constrain allowed input types (e.g. Paths, Spatial/Temporal)
-# CONSIDER: do we want to set any defaults here, or force the user to consider them via config.yaml?
+# TODO: annotate the guardrails implemented into the yaml file as comments
 class KdConfig(BaseModel):
-    output_path: str | Path
+    output_path: str | Path = None
     horizontal_res: int
     vertical_res: float
     subsurface_thresh: float
@@ -44,13 +44,18 @@ class KdConfig(BaseModel):
     solar_bg_noise_multiplier: float
     solar_bg_min_signal_conf: int
     spatial: list[float]
-    temporal: list[datetime | str] 
+    temporal: list[datetime | str]
     decay_zone_threshold: float
     kd_fit_method: str
     generate_plots: bool
 
     model_config = {"validate_assignment": True} # checks typing if a user interactively changes a config value
 
+# TODO: fill in these guardrails
+def check_config_values(KdConfig):
+    assert KdConfig.spatial != [0,0,0,0]
+    assert KdConfig.temporal != ["2000-01-01", "2000-01-01"]
+    assert KdConfig.horizontal_res < 3000
 
 def get_args(config_path: str | None = None) -> KdConfig:
     if config_path is None:
@@ -100,6 +105,8 @@ def run_pipeline(args: KdConfig):
     #     atl24_file_path = os.path.join(args.workspace_path, atl24_file_path)
     # args.output_path = os.path.join(args.workspace_path, args.args.output_path)
     # os.makedirs(args.output_path, exist_ok=True)
+
+    check_config_values(KdConfig)
 
     ### can we get the version from SR directly?
     match = re.search(r"_(\d{14})_", atl03_h5_file_path)

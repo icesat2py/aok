@@ -1,5 +1,10 @@
 # ICESat-2 Kd Computation Configuration File
 
+# Define spatial and temporal extent
+# NOTE: leave these defaults if you'd like to enter extent from a Jupyter Notebook
+spatial: [0,0,0,0]
+temporal: ["2000-01-01", "2000-01-01"]
+
 # Output files settings
 output_path: "./results/"
 
