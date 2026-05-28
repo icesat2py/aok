@@ -159,6 +159,17 @@ def run_pipeline(args: KdConfig):
         # min_signal_conf=args.ir_ap_min_signal_conf,
     # )
 
+    # Sliderule request 
+    # pull spatial and temporal args from kdconfig
+    sea_photon_request = DataRequest(spatial=srregion["poly"],
+                    date_range=(f'{temporal[0]:%Y-%m-%d}', f'{temporal[1]:%Y-%m-%d}'), 
+                                     need_atl24 = False,
+                    download_dir= "./test_data/")
+    # initiate sliderule client
+    sliderule.init("slideruleearth.io")
+    sea_photon_request.get_sliderule_data()
+    sea_photon_dataset = sea_photon_request.photons
+
     # Step 5 — Solar background filter is ON by default.
     # It self-gates on solar_elevation so has zero effect on nighttime passes.
     # Use `solar_bg_filter: false`` to turn it off.
