@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import os
 from pathlib import Path
@@ -29,8 +30,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# TODO: expand/constrain allowed input types (e.g. Paths, Spatial/Temporal)
+# CONSIDER: do we want to set any defaults here, or force the user to consider them via config.yaml?
 class KdConfig(BaseModel):
-    output_path: str
+    output_path: str | Path
     horizontal_res: int
     vertical_res: float
     subsurface_thresh: float
@@ -40,6 +43,8 @@ class KdConfig(BaseModel):
     solar_bg_median_window_deg: float
     solar_bg_noise_multiplier: float
     solar_bg_min_signal_conf: int
+    spatial: list[float]
+    temporal: list[datetime | str] 
     decay_zone_threshold: float
     kd_fit_method: str
     generate_plots: bool
