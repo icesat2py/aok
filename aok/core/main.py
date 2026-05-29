@@ -106,13 +106,13 @@ def run_pipeline(args: KdConfig):
     # if atl24_file_path and (not os.path.isabs(atl24_file_path)):
     #     atl24_file_path = os.path.join(args.workspace_path, atl24_file_path)
     # args.output_path = os.path.join(args.workspace_path, args.args.output_path)
-    # os.makedirs(args.output_path, exist_ok=True)
+    os.makedirs(args.output_path, exist_ok=True)
 
     check_config_values(args)
 
     ### can we get the version from SR directly? - we can specify version when calling SR
     #match = re.search(r"_(\d{14})_", atl03_h5_file_path)
-    #timestamp = match.group(1) if match else "unknown"
+    timestamp = args.temporal[0] # replaces timestamp from h5 file name
 
     #version_match = re.search(
     #    r"ATL03_\d{14}_\d{8}_(\d{3})_\d{2}", os.path.basename(atl03_h5_file_path)
@@ -314,7 +314,6 @@ def run_pipeline(args: KdConfig):
 
 if __name__ == "__main__":
     kd_args = get_args()
-    print(get_args)
     try:
         run_pipeline(kd_args)
     except Exception as e:

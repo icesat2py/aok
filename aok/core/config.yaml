@@ -8,7 +8,7 @@ spatial: [-150.622053, 61.045382, -150.361757, 61.171146]
 temporal: ['2025-08-21', '2025-08-22']
 
 # atl03 version (optional)
-#atl03_version: None
+atl03_version: None
 
 
 # Output files settings
