@@ -41,7 +41,10 @@ class DataRequest:
         Optional tuple of start and end time strings in HH:MM:SS format. If not
         provided, the full day is used for each date in `date_range`.
     beams
-        Optional list of beam identifiers to request.
+        Optional set of beams, "strong", "weak", or "all". Defaults to "strong". 
+        If set to "strong" spot column will be filtered for [1,3,5] (strong beams).
+        If set to "weak" spot column will be filtered for [2,4,6] (weak beams).
+        If set to "all" no filtering will take place.
     output
         Preferred output mode. Supported values are currently "dataframe" and
         "geodataframe".
@@ -100,7 +103,7 @@ class DataRequest:
     spatial: Any | None = None
     date_range: tuple[str, str] | None = None
     time_range: tuple[str, str] | None = None
-    beams: list[str] | None = None
+    beams: str | None = None
     output: str = "dataframe"  # transitioned from OutputType to str, because OutputType was undefined
     download_dir: Path | None = None  # HANNAH check if properly specified
 
@@ -267,6 +270,7 @@ class DataRequest:
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
             "cnf": [0, 1, 2, 3, 4],
+            #"spots": [1, 3, 5], # note, functionality broken, only 1 spot or all can be pulled
             "quality_ph": [0], # replaces ir/ap filter
         }
 
@@ -485,6 +489,89 @@ class DataRequest:
 
         return merged
 
+    ATL03_COLUMN_RENAMES = {
+        # SlideRule column name: existing-code column name
+    
+        # Photon location / height
+        #"lat_ph": "latitude",
+        #"lon_ph": "longitude",
+        #"h_ph": "photon_height",
+    
+        # Time
+        #"delta_time": "photon_delta_time",
+    
+        # Along-track / across-track
+        #"dist_ph_along": "dist_ph_along",
+        #"x_atc": "relative_AT_dist",
+        #"y_atc": "dist_ph_across",
+    
+        # Signal / quality
+        #"atl03_cnf": "signal_conf_ph",
+        #"quality_ph": "quality_ph",
+    
+        # Solar / background
+        #"solar_elevation": "solar_elevation",
+        #"bckgrd_rate": "photon_background_rate",
+
+        # Geolocation fields
+        #"segment_id": "Segment_ID",
+        #"ph_index_beg": "Segment_Index_begin",
+        #"segment_ph_cnt": "Segment_PE_count",
+        #"segment_dist_x": "Equator_Segment_Distance",
+        #"segment_length": "Segment_Length",
+        #"reference_photon_lat": "segment_lat",
+        #"reference_photon_lon": "segment_lon",
+        #"ref_elev": "ref_elev",
+        #"ref_azimuth": "ref_azimuth",
+
+        # Geophysical correction
+        #"geoid": "geoid",
+    }
+
+
+    def rename_atl03_columns(atl03_photons: pd.DataFrame) -> pd.DataFrame:
+        """
+        Rename ATL03 columns from SlideRule names to the names expected by
+        the existing Kd-processing code.
+
+        Columns not present in the dataframe are ignored. Columns not listed in
+        ATL03_COLUMN_RENAMES are preserved unchanged.
+        """
+        rename_map = {
+            old_name: new_name
+            for old_name, new_name in ATL03_COLUMN_RENAMES.items()
+            if old_name in atl03_photons.columns
+        }
+
+        return atl03_photons.rename(columns=rename_map).copy()
+
+    def _filter_by_beam_strength(self, photon_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter photon dataframe by ICESat-2 beam strength.
+
+        None / "strong" -> keep spots 1, 3, 5
+        "weak"          -> keep spots 2, 4, 6
+        "all"           -> no filtering
+        """
+        if "spot" not in photon_df.columns:
+            raise ValueError("Cannot filter by beam strength: dataframe is missing a 'spot' column.")
+
+        beam_strength = self.beams or "strong"
+
+        if beam_strength == "strong":
+            spots = (1, 3, 5)
+        elif beam_strength == "weak":
+            spots = (2, 4, 6)
+        elif beam_strength == "all":
+            return photon_df.copy()
+        else:
+            raise ValueError(
+                "beams must be None, 'strong', 'weak', or 'all'. "
+                f"Got: {self.beams!r}"
+            )
+
+        return photon_df.loc[photon_df["spot"].isin(spots)].copy()
+
     def get_sliderule_data(self) -> "DataRequest":
         """
         Use sliderule to get data from all sources and return
@@ -503,6 +590,10 @@ class DataRequest:
 
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
+             # Filter ATL03 photons by beam strength.
+             # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
+            atl03_photons = self._filter_by_beam_strength(atl03_photons)
+
             self.products.append("ATL03")
             self.sources.append("sliderule")
             self.metadata["ATL03"] = {
@@ -515,6 +606,10 @@ class DataRequest:
             atl24_photons = self.get_atl24_data()
 
             if atl24_photons is not None:
+                # Filter ATL24 data by beam strength.
+                # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
+                atl24_photons = self._filter_by_beam_strength(atl24_photons)
+
                 self.products.append("ATL24")
                 self.sources.append("sliderule")
                 self.metadata["ATL24"] = {
