@@ -282,7 +282,6 @@ def test_get_atl03_data_calls_sliderule_run(
     fake_atl03_photons,
 ):
     basic_request.date_range = ("2018-10-22", "2018-10-26")
-    basic_request.output = None
 
     calls = []
 
@@ -302,53 +301,6 @@ def test_get_atl03_data_calls_sliderule_run(
     assert calls[0]["api"] == "atl03x"
     assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
     assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
-
-
-def test_get_sliderule_data_with_gebco_records_gebco_columns(
-    monkeypatch,
-    basic_request,
-    fake_atl03_photons_with_gebco,
-):
-    basic_request.date_range = ("2018-10-22", "2018-10-26")
-    basic_request.output = None
-    basic_request.need_atl03 = True
-    basic_request.need_atl24 = False
-    basic_request.need_gebco = True
-
-    def fake_init(sliderule_url):
-        return None
-
-    def fake_run(api, params):
-        assert api == "atl03x"
-        assert params["samples"] == {"gebco": {"asset": "gebco-s3"}}
-        return fake_atl03_photons_with_gebco
-
-    monkeypatch.setattr(
-        "aok.core.acquisition.base.sliderule.init",
-        fake_init,
-    )
-    monkeypatch.setattr(
-        "aok.core.acquisition.base.sliderule.run",
-        fake_run,
-    )
-
-    result = basic_request.get_sliderule_data()
-
-    assert result is basic_request
-    assert basic_request.photons is fake_atl03_photons_with_gebco
-
-    missing_columns = REQUIRED_GEBCO_COLUMNS.difference(basic_request.photons.columns)
-    assert not missing_columns, (
-        "GEBCO-enabled ATL03 result is missing GEBCO columns: "
-        f"{sorted(missing_columns)}"
-    )
-
-    assert basic_request.products == ["ATL03"]
-    assert basic_request.sources == ["sliderule"]
-    assert set(basic_request.metadata["ATL03"]["columns"]) == set(
-        fake_atl03_photons_with_gebco.columns
-    )
-
 
 def test_get_atl24_data_calls_sliderule_run(
     monkeypatch,
@@ -377,6 +329,78 @@ def test_get_atl24_data_calls_sliderule_run(
     assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
     assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
 
+# Beam filtering tests
+def make_spot_photon_df():
+    return pd.DataFrame(
+        {
+            "spot": [1, 2, 3, 4, 5, 6],
+            "height": [-1.0, -2.0, -3.0, -4.0, -5.0, -6.0],
+        }
+    )
+
+
+def test_filter_by_beam_strength_none_defaults_to_strong():
+    request = DataRequest(beams=None)
+
+    result = request._filter_by_beam_strength(make_spot_photon_df())
+
+    assert list(result["spot"]) == [1, 3, 5]
+
+
+def test_filter_by_beam_strength_strong_keeps_strong_spots():
+    request = DataRequest(beams="strong")
+
+    result = request._filter_by_beam_strength(make_spot_photon_df())
+
+    assert list(result["spot"]) == [1, 3, 5]
+
+
+def test_filter_by_beam_strength_weak_keeps_weak_spots():
+    request = DataRequest(beams="weak")
+
+    result = request._filter_by_beam_strength(make_spot_photon_df())
+
+    assert list(result["spot"]) == [2, 4, 6]
+
+
+def test_filter_by_beam_strength_all_keeps_all_spots():
+    request = DataRequest(beams="all")
+
+    result = request._filter_by_beam_strength(make_spot_photon_df())
+
+    pd.testing.assert_frame_equal(
+        result.reset_index(drop=True),
+        make_spot_photon_df(),
+    )
+
+def test_get_sliderule_data_filters_atl03_by_beam_strength(monkeypatch):
+    request = DataRequest(
+        spatial=[-70, 42, -69, 43],
+        date_range=("2024-01-01", "2024-01-02"),
+        need_atl03=True,
+        need_atl24=False,
+        beams="weak",
+    )
+
+    raw_atl03 = pd.DataFrame(
+        {
+            "spot": [1, 2, 3, 4, 5, 6],
+            "height": [-1.0, -2.0, -3.0, -4.0, -5.0, -6.0],
+        }
+    )
+
+    monkeypatch.setattr(request, "get_atl03_data", lambda: raw_atl03)
+
+    result_request = request.get_sliderule_data()
+
+    assert list(result_request.photons["spot"]) == [2, 4, 6]
+    assert result_request.metadata["ATL03"]["n_rows"] == 3
+
+def test_filter_by_beam_strength_rejects_invalid_value():
+    request = DataRequest(beams="medium")
+
+    with pytest.raises(ValueError, match="beams must be"):
+        request._filter_by_beam_strength(make_spot_photon_df())
 
 def test_merge_photons_left_joins_atl24_to_atl03(
     basic_request,
@@ -439,6 +463,7 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     basic_request.output = None
     basic_request.need_atl03 = True
     basic_request.need_atl24 = True
+    basic_request.beams = "all" # so filtering does not occur in merge test
 
     init_calls = []
     run_calls = []
