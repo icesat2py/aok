@@ -69,7 +69,7 @@ def check_not_null(key: Any) -> bool:
     bool
         True if key is not None and not empty, False otherwise
     """
-    return not (key is None or all(l is None for l in key))
+    return not (key is None or all(elem is None for elem in key))
 
 
 def get_bbox_shapely(
