@@ -2,12 +2,13 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from shapely.geometry import Point
 import yaml
 
 
-def load_test_sites(path="./test_sites.yaml"):
+def load_test_sites(path: str = "./test_sites.yaml") -> dict[str, Any]:
     """Load test sites from YAML file.
 
     Parameters
@@ -24,7 +25,7 @@ def load_test_sites(path="./test_sites.yaml"):
         return yaml.safe_load(f)
 
 
-def get_region_by_name(name, sites=None):
+def get_region_by_name(name: str, sites: dict[str, Any] | None = None) -> dict[str, Any]:
     """Retrieve a region configuration by name.
 
     Parameters
@@ -53,7 +54,7 @@ def get_region_by_name(name, sites=None):
     raise KeyError(msg)
 
 
-def check_not_null(key):
+def check_not_null(key: Any) -> bool:
     """Check if a key or list of keys is not None/empty.
 
     Parameters
@@ -69,7 +70,7 @@ def check_not_null(key):
     return not (key is None or all(l is None for l in key))
 
 
-def get_bbox_shapely(lat, lon, buffer_deg) -> list:
+def get_bbox_shapely(lat: float, lon: float, buffer_deg: float) -> tuple[float, float, float, float]:
     """Create a bounding box around a point using Shapely.
 
     Parameters
@@ -83,7 +84,7 @@ def get_bbox_shapely(lat, lon, buffer_deg) -> list:
 
     Returns
     -------
-    list
+    tuple
         Bounding box bounds as (min_lon, min_lat, max_lon, max_lat)
     """
     point = Point(lon, lat)
@@ -92,7 +93,7 @@ def get_bbox_shapely(lat, lon, buffer_deg) -> list:
     return bbox_poly.bounds  # Returns (min_lon, min_lat, max_lon, max_lat)
 
 
-def get_spatial_extent(site):
+def get_spatial_extent(site: dict[str, Any]) -> tuple[float, float, float, float]:
     """Extract spatial extent from site configuration.
 
     Checks for bbox first, then falls back to lat/lon with buffer.
@@ -123,17 +124,17 @@ def get_spatial_extent(site):
     raise ValueError(msg)
 
 
-def get_temporal_extent(site):
+def get_temporal_extent(site: dict[str, Any]) -> list[datetime]:
     """Extract temporal extent from site configuration.
 
     Parameters
     ----------
-    site : dict
+    site : dict[str, Any]
         Site configuration dictionary containing dates
 
     Returns
     -------
-    list
+    list[datetime]
         List of [start_datetime, end_datetime]
 
     Raises
