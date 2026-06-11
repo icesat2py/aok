@@ -49,7 +49,8 @@ def get_region_by_name(name, sites=None):
     for site in sites["locations"]:
         if site["name"] == name:
             return site
-    raise KeyError(f"Region not found: {name}")
+    msg = f"Region not found: {name}"
+    raise KeyError(msg)
 
 
 def check_not_null(key):
@@ -57,7 +58,7 @@ def check_not_null(key):
 
     Parameters
     ----------
-    key : Any or list
+    key : str or list
         Single value or list to check
 
     Returns
