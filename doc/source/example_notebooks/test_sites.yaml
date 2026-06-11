@@ -1,0 +1,315 @@
+locations:
+- name: chesapeake_bay
+  RGT: null
+  filename: ATL03_20181022081006_03620106_007_01.h5
+  dates:
+    start: '2018-10-22'
+    end: '2018-10-26'
+  spatial_extent:
+    bbox: [-77.54, 36.66, -74.58, 39.63]
+    latlon: null
+    buffer: null
+- name: core_sound_nc
+  RGT: '0484'
+  filename: null
+  dates:
+    start: '2022-04-23'
+    end: '2022-04-23'
+  spatial_extent:
+    bbox:
+    - -76.319707
+    - 34.895786
+    - -76.210123
+    - 34.985618
+    latlon:
+    - 34.940702
+    - -76.264915
+    buffer: 5.0
+- name: great_bay_nj
+  RGT: '0362'
+  filename: null
+  dates:
+    start: '2024-10-10'
+    end: '2024-10-10'
+  spatial_extent:
+    bbox:
+    - -74.410173
+    - 39.469391
+    - -74.293731
+    - 39.559223
+    latlon:
+    - 39.514307
+    - -74.351952
+    buffer: 5.0
+- name: apalachee_bay_fl
+  RGT: '1033'
+  filename: null
+  dates:
+    start: '2025-05-23'
+    end: '2025-05-23'
+  spatial_extent:
+    bbox:
+    - -84.160703
+    - 29.645356
+    - -83.746519
+    - 30.00468
+    latlon:
+    - 29.825018
+    - -83.953611
+    buffer: 20.0
+- name: columbia_river_estuary
+  RGT: '1050'
+  filename: null
+  dates:
+    start: '2025-05-24'
+    end: '2025-05-24'
+  spatial_extent:
+    bbox:
+    - -123.534834
+    - 46.20226
+    - -123.404936
+    - 46.292092
+    latlon:
+    - 46.247176
+    - -123.469885
+    buffer: 5.0
+- name: amazon_river_plume
+  RGT: '0117'
+  filename: null
+  dates:
+    start: '2023-06-27'
+    end: '2023-06-27'
+  spatial_extent:
+    bbox:
+    - null
+    - null
+    - null
+    - null
+    latlon:
+    - null
+    - null
+    buffer: 15.0
+- name: coastal_suriname
+  RGT: '0110'
+  filename: null
+  dates:
+    start: '2023-06-27'
+    end: '2023-06-27'
+  spatial_extent:
+    bbox:
+    - -55.344061
+    - 5.926538
+    - -55.073053
+    - 6.196032
+    latlon:
+    - 6.061285
+    - -55.208557
+    buffer: 15.0
+- name: kodiak_island_waves
+  RGT: '0937'
+  filename: null
+  dates:
+    start: '2023-02-19'
+    end: '2023-02-19'
+  spatial_extent:
+    bbox:
+    - -154.608682
+    - 56.212883
+    - -154.34974
+    - 56.356613
+    latlon:
+    - 56.284748
+    - -154.479211
+    buffer: 8.0
+- name: south_coast_portugal_waves
+  RGT: '0344'
+  filename: null
+  dates:
+    start: '2025-07-08'
+    end: '2025-07-08'
+  spatial_extent:
+    bbox:
+    - -9.430314
+    - 38.246449
+    - -9.086528
+    - 38.515943
+    latlon:
+    - 38.381196
+    - -9.258421
+    buffer: 15.0
+- name: hawaiian_islands_waves
+  RGT: '1158'
+  filename: null
+  dates:
+    start: '2023-12-03'
+    end: '2023-12-03'
+  spatial_extent:
+    bbox:
+    - -157.679862
+    - 20.803931
+    - -157.005772
+    - 21.432749
+    latlon:
+    - 21.11834
+    - -157.342817
+    buffer: 35.0
+- name: gulf_of_lions_night
+  RGT: '1159'
+  filename: null
+  dates:
+    start: '2023-12-03'
+    end: '2023-12-03'
+  spatial_extent:
+    bbox:
+    - 3.795804
+    - 43.139246
+    - 4.21542
+    - 43.444672
+    latlon:
+    - 43.291959
+    - 4.005612
+    buffer: 17.0
+- name: gulf_of_lions_day
+  RGT: '1197'
+  filename: null
+  dates:
+    start: '2023-12-06'
+    end: '2023-12-06'
+  spatial_extent:
+    bbox:
+    - 3.814676
+    - 43.092271
+    - 4.30818
+    - 43.451595
+    latlon:
+    - 43.271933
+    - 4.061428
+    buffer: 20.0
+- name: cook_inlet_tidal_flat
+  RGT: '0975'
+  filename: null
+  dates:
+    start: '2023-08-23'
+    end: '2023-08-23'
+  spatial_extent:
+    bbox:
+    - -149.685473
+    - 60.912944
+    - -149.500427
+    - 61.002776
+    latlon:
+    - 60.95786
+    - -149.59295
+    buffer: 5.0
+- name: baja_california_low_density_night
+  RGT: '1225'
+  filename: null
+  dates:
+    start: '2023-09-08'
+    end: '2023-09-08'
+  spatial_extent:
+    bbox:
+    - -113.62051
+    - 30.458626
+    - -113.098238
+    - 30.907782
+    latlon:
+    - 30.683204
+    - -113.359374
+    buffer: 25.0
+- name: baja_california_low_density_day
+  RGT: '1339'
+  filename: null
+  dates:
+    start: '2023-09-15'
+    end: '2023-09-15'
+  spatial_extent:
+    bbox:
+    - -111.958456
+    - 27.063638
+    - -111.65546
+    - 27.333132
+    latlon:
+    - 27.198385
+    - -111.806958
+    buffer: 15.0
+- name: bora_bora_high_waves
+  RGT: '0868'
+  filename: null
+  dates:
+    start: '2023-02-15'
+    end: '2023-02-15'
+  spatial_extent:
+    bbox:
+    - -151.769291
+    - -17.088578
+    - -151.393731
+    - -16.729254
+    latlon:
+    - -16.908916
+    - -151.581511
+    buffer: 20.0
+- name: cook_inlet_very_turbid_water
+  RGT: '1013'
+  filename: null
+  dates:
+    start: '2025-08-21'
+    end: '2025-08-22'
+  spatial_extent:
+    bbox:
+    - -150.622053
+    - 61.045382
+    - -150.361757
+    - 61.171146
+    latlon:
+    - 61.108264
+    - -150.491905
+    buffer: 7.0
+- name: rio_de_la_plata
+  RGT: '0216'
+  filename: null
+  dates:
+    start: '2023-07-04'
+    end: '2023-07-04'
+  spatial_extent:
+    bbox:
+    - -58.409826
+    - -34.611195
+    - -58.082914
+    - -34.341701
+    latlon:
+    - -34.476448
+    - -58.24637
+    buffer: 15.0
+- name: klamath_lake_algal_bloom
+  RGT: '1332'
+  filename: null
+  dates:
+    start: '2023-09-15'
+    end: '2023-09-15'
+  spatial_extent:
+    bbox:
+    - -122.041563
+    - 42.423257
+    - -121.968517
+    - 42.477155
+    latlon:
+    - 42.450206
+    - -122.00504
+    buffer: 3.0
+- name: chesapeake_bay
+  RGT: null
+  filename: ATL03_20230825074121_10102002_006_02.h5
+  dates:
+    start: '2018-10-22'
+    end: '2018-10-26'
+  spatial_extent:
+    bbox:
+    - -77.54
+    - 36.66
+    - -74.58
+    - 39.63
+    latlon:
+    - null
+    - null
+    buffer: 0.0
