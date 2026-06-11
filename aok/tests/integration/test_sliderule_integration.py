@@ -67,9 +67,9 @@ def test_sliderule_real_atl03_request_returns_photons():
     assert request.metadata["ATL03"]["request_type"] == "atl03"
     assert request.metadata["ATL03"]["n_rows"] == len(request.photons)
 
-    assert dataframe_has_field(
-        request.photons, "time_ns"
-    ), "Expected time_ns to exist either as a column or as the dataframe index."
+    assert dataframe_has_field(request.photons, "time_ns"), (
+        "Expected time_ns to exist either as a column or as the dataframe index."
+    )
 
     missing_fields = missing_required_fields(
         request.photons,

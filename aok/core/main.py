@@ -2,34 +2,23 @@ from datetime import datetime
 import logging
 import os
 from pathlib import Path
-import re
 
 from pydantic import BaseModel
+from sliderule import sliderule
 import yaml
 
 # clean these up once it's determined which functions are called or not
 from aok.core.acquisition.base import DataRequest
-from sliderule import sliderule, icesat2
 
-from .kd_utils.bathy_processing import process_subsurface_photon_filtering
 from .kd_utils.data_processing import (
-    Extract_sea_photons,
-    apply_optional_ir_ap_filter,
     apply_optional_solar_background_filter,
-    filter_photon_dataset_by_hull_area,
-)
-from .kd_utils.Kd_analysis import process_kd_calculation
-from .kd_utils.sea_photons_analysis import process_sea_photon_binning
-from .kd_utils.visualization import (
-    plot_convex_hulls,
-    plot_kd_photons,
-    plot_photon_quality_flags,
 )
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 # TODO: expand/constrain allowed input types (e.g. Paths, Spatial/Temporal)
 # TODO: annotate the guardrails implemented into the yaml file as comments
@@ -51,13 +40,17 @@ class KdConfig(BaseModel):
     kd_fit_method: str
     generate_plots: bool
 
-    model_config = {"validate_assignment": True} # checks typing if a user interactively changes a config value
+    model_config = {
+        "validate_assignment": True
+    }  # checks typing if a user interactively changes a config value
+
 
 # TODO: fill in these guardrails
 def check_config_values(config: KdConfig):
-    assert config.spatial != [0,0,0,0]
+    assert config.spatial != [0, 0, 0, 0]
     assert config.temporal != ["2000-01-01", "2000-01-01"]
     assert config.horizontal_res < 3000
+
 
 def get_args(config_path: str | None = None) -> KdConfig:
     if config_path is None:
@@ -65,7 +58,7 @@ def get_args(config_path: str | None = None) -> KdConfig:
         config_path = Path(__file__).parent / "config.yaml"
     else:
         config_path = Path(config_path)
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         raw_config = yaml.safe_load(f)
 
     # # Support config.yaml containing gebco_path as either a string or list.
@@ -111,28 +104,28 @@ def run_pipeline(args: KdConfig):
     check_config_values(args)
 
     ### can we get the version from SR directly? - we can specify version when calling SR
-    #match = re.search(r"_(\d{14})_", atl03_h5_file_path)
-    timestamp = args.temporal[0] # replaces timestamp from h5 file name
+    # match = re.search(r"_(\d{14})_", atl03_h5_file_path)
+    timestamp = args.temporal[0]  # replaces timestamp from h5 file name
 
-    #version_match = re.search(
+    # version_match = re.search(
     #    r"ATL03_\d{14}_\d{8}_(\d{3})_\d{2}", os.path.basename(atl03_h5_file_path)
-    #)
-    #atl03_version = int(version_match.group(1)) if version_match else None
-    #logger.info(
+    # )
+    # atl03_version = int(version_match.group(1)) if version_match else None
+    # logger.info(
     #    "ATL03 version detected: %s",
     #    f"{atl03_version:03d}" if atl03_version else "unknown",
-    #)
+    # )
 
     # if args.enable_ir_ap_filter:
-        # if atl03_version is None or atl03_version < 7:
-        #     logger.error(
-        #         "IR/AP filter requires ATL03 version 007 or later. "
-        #         "Detected version: %s. "
-        #         "Skipping IR/AP filter for this run. "
-        #         "Switch to a version 007 file (e.g., Wax Delta dataset) to enable this step.",
-        #         f"{atl03_version:03d}" if atl03_version else "unknown",
-        #     )
-            # args.enable_ir_ap_filter = False
+    # if atl03_version is None or atl03_version < 7:
+    #     logger.error(
+    #         "IR/AP filter requires ATL03 version 007 or later. "
+    #         "Detected version: %s. "
+    #         "Skipping IR/AP filter for this run. "
+    #         "Switch to a version 007 file (e.g., Wax Delta dataset) to enable this step.",
+    #         f"{atl03_version:03d}" if atl03_version else "unknown",
+    #     )
+    # args.enable_ir_ap_filter = False
 
     # gebco_pattern = os.path.join(gebco_full_path, "gebco_*.tif")
     # gebco_file_path_lists = [p for p in glob.glob(gebco_pattern)]
@@ -141,24 +134,25 @@ def run_pipeline(args: KdConfig):
     # Place to insert sliderule into code
     # Sliderule request
     # pull spatial and temporal args from kdconfig
-    srregion = sliderule.toregion(source = args.spatial)
+    srregion = sliderule.toregion(source=args.spatial)
     temporal = [
         datetime.fromisoformat(args.temporal[0]),
         datetime.fromisoformat(args.temporal[1]),
     ]
-    sea_photon_request = DataRequest(spatial=srregion["poly"],
-                    date_range=(f'{temporal[0]:%Y-%m-%d}',
-                                f'{temporal[1]:%Y-%m-%d}'),
-                    download_dir= "./test_data/")
+    sea_photon_request = DataRequest(
+        spatial=srregion["poly"],
+        date_range=(f"{temporal[0]:%Y-%m-%d}", f"{temporal[1]:%Y-%m-%d}"),
+        download_dir="./test_data/",
+    )
     # initiate sliderule client
     sliderule.init("slideruleearth.io")
     sea_photon_request.get_sliderule_data()
     sea_photon_dataset = sea_photon_request.photons
 
     # commenting out shoreline filtering in main
-    #sea_photon_dataset = Extract_sea_photons(
+    # sea_photon_dataset = Extract_sea_photons(
     #    is2_mds, target_strong_beams, shoreline_data_path
-    #)
+    # )
 
     # Step 5 — Solar background filter is ON by default.
     # It self-gates on solar_elevation so has zero effect on nighttime passes.
@@ -233,19 +227,19 @@ def run_pipeline(args: KdConfig):
     # )
 
     # if args.enable_convex_hull_filter:
-        # final_filtered_subsurface_photon_dataset, convex_hull_areas, convex_hulls = (
-        #     filter_photon_dataset_by_hull_area(
-        #         final_filtered_subsurface_photon_dataset,
-        #         hull_area_threshold=args.convex_hull_area_threshold,
-        #     )
-        # )
-        # if plot_target_beam and not args.no_plot:
-        #     plot_convex_hulls(
-        #         final_filtered_subsurface_photon_dataset,
-        #         plot_target_beam,
-        #         convex_hulls,
-        #         convex_hull_areas,
-        #     )
+    # final_filtered_subsurface_photon_dataset, convex_hull_areas, convex_hulls = (
+    #     filter_photon_dataset_by_hull_area(
+    #         final_filtered_subsurface_photon_dataset,
+    #         hull_area_threshold=args.convex_hull_area_threshold,
+    #     )
+    # )
+    # if plot_target_beam and not args.no_plot:
+    #     plot_convex_hulls(
+    #         final_filtered_subsurface_photon_dataset,
+    #         plot_target_beam,
+    #         convex_hulls,
+    #         convex_hull_areas,
+    #     )
 
     subsurface_output_path = os.path.join(
         args.output_path,
@@ -307,7 +301,6 @@ def run_pipeline(args: KdConfig):
     #             kd_input_dataset,
     #             kd_df_merged_distance,
     #         )
-
 
     logger.info("SUCCESS! Kd output: %s", kd_output_path)
 

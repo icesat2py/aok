@@ -302,6 +302,7 @@ def test_get_atl03_data_calls_sliderule_run(
     assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
     assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
 
+
 def test_get_atl24_data_calls_sliderule_run(
     monkeypatch,
     basic_request,
@@ -328,6 +329,7 @@ def test_get_atl24_data_calls_sliderule_run(
     assert calls[0]["api"] == "atl24x"
     assert calls[0]["parms"]["t0"] == "2018-10-22T00:00:00Z"
     assert calls[0]["parms"]["t1"] == "2018-10-26T23:59:59Z"
+
 
 # Beam filtering tests
 def make_spot_photon_df():
@@ -373,6 +375,7 @@ def test_filter_by_beam_strength_all_keeps_all_spots():
         make_spot_photon_df(),
     )
 
+
 def test_get_sliderule_data_filters_atl03_by_beam_strength(monkeypatch):
     request = DataRequest(
         spatial=[-70, 42, -69, 43],
@@ -396,11 +399,13 @@ def test_get_sliderule_data_filters_atl03_by_beam_strength(monkeypatch):
     assert list(result_request.photons["spot"]) == [2, 4, 6]
     assert result_request.metadata["ATL03"]["n_rows"] == 3
 
+
 def test_filter_by_beam_strength_rejects_invalid_value():
     request = DataRequest(beams="medium")
 
     with pytest.raises(ValueError, match="beams must be"):
         request._filter_by_beam_strength(make_spot_photon_df())
+
 
 def test_merge_photons_left_joins_atl24_to_atl03(
     basic_request,
@@ -463,7 +468,7 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     basic_request.output = None
     basic_request.need_atl03 = True
     basic_request.need_atl24 = True
-    basic_request.beams = "all" # so filtering does not occur in merge test
+    basic_request.beams = "all"  # so filtering does not occur in merge test
 
     init_calls = []
     run_calls = []

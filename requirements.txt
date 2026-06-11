@@ -1,7 +1,6 @@
 
 geopandas
 h5py
-pydantic
 
 # Need to confirm which of these remain dependencies
 hdbscan
@@ -10,6 +9,7 @@ matplotlib
 netcdf4
 numpy
 pandas
+pydantic
 pyproj
 rasterio
 Rtree

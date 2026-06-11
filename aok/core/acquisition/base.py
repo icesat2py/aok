@@ -1,18 +1,18 @@
 # contains classes for data input objects and data output objects after aquisition from the cloud.
 from dataclasses import dataclass, field
+import logging
 from pathlib import Path
 from typing import Any
 import warnings
-import logging
+
 import geopandas as gpd
 import pandas as pd
-
-import icepyx as ipx
 from sliderule import sliderule
 
 # from aok.core.kd_utils.data_processing import
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class DataRequest:
@@ -41,7 +41,7 @@ class DataRequest:
         Optional tuple of start and end time strings in HH:MM:SS format. If not
         provided, the full day is used for each date in `date_range`.
     beams
-        Optional set of beams, "strong", "weak", or "all". Defaults to "strong". 
+        Optional set of beams, "strong", "weak", or "all". Defaults to "strong".
         If set to "strong" spot column will be filtered for [1,3,5] (strong beams).
         If set to "weak" spot column will be filtered for [2,4,6] (weak beams).
         If set to "all" no filtering will take place.
@@ -270,8 +270,8 @@ class DataRequest:
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
             "cnf": [0, 1, 2, 3, 4],
-            #"spots": [1, 3, 5], # note, functionality broken, only 1 spot or all can be pulled
-            "quality_ph": [0], # replaces ir/ap filter
+            # "spots": [1, 3, 5], # note, functionality broken, only 1 spot or all can be pulled
+            "quality_ph": [0],  # replaces ir/ap filter
         }
 
         ## Now adding required auxillary fields
@@ -491,43 +491,35 @@ class DataRequest:
 
     ATL03_COLUMN_RENAMES = {
         # SlideRule column name: existing-code column name
-    
         # Photon location / height
-        #"lat_ph": "latitude",
-        #"lon_ph": "longitude",
-        #"h_ph": "photon_height",
-    
+        # "lat_ph": "latitude",
+        # "lon_ph": "longitude",
+        # "h_ph": "photon_height",
         # Time
-        #"delta_time": "photon_delta_time",
-    
+        # "delta_time": "photon_delta_time",
         # Along-track / across-track
-        #"dist_ph_along": "dist_ph_along",
-        #"x_atc": "relative_AT_dist",
-        #"y_atc": "dist_ph_across",
-    
+        # "dist_ph_along": "dist_ph_along",
+        # "x_atc": "relative_AT_dist",
+        # "y_atc": "dist_ph_across",
         # Signal / quality
-        #"atl03_cnf": "signal_conf_ph",
-        #"quality_ph": "quality_ph",
-    
+        # "atl03_cnf": "signal_conf_ph",
+        # "quality_ph": "quality_ph",
         # Solar / background
-        #"solar_elevation": "solar_elevation",
-        #"bckgrd_rate": "photon_background_rate",
-
+        # "solar_elevation": "solar_elevation",
+        # "bckgrd_rate": "photon_background_rate",
         # Geolocation fields
-        #"segment_id": "Segment_ID",
-        #"ph_index_beg": "Segment_Index_begin",
-        #"segment_ph_cnt": "Segment_PE_count",
-        #"segment_dist_x": "Equator_Segment_Distance",
-        #"segment_length": "Segment_Length",
-        #"reference_photon_lat": "segment_lat",
-        #"reference_photon_lon": "segment_lon",
-        #"ref_elev": "ref_elev",
-        #"ref_azimuth": "ref_azimuth",
-
+        # "segment_id": "Segment_ID",
+        # "ph_index_beg": "Segment_Index_begin",
+        # "segment_ph_cnt": "Segment_PE_count",
+        # "segment_dist_x": "Equator_Segment_Distance",
+        # "segment_length": "Segment_Length",
+        # "reference_photon_lat": "segment_lat",
+        # "reference_photon_lon": "segment_lon",
+        # "ref_elev": "ref_elev",
+        # "ref_azimuth": "ref_azimuth",
         # Geophysical correction
-        #"geoid": "geoid",
+        # "geoid": "geoid",
     }
-
 
     def rename_atl03_columns(atl03_photons: pd.DataFrame) -> pd.DataFrame:
         """
@@ -554,7 +546,9 @@ class DataRequest:
         "all"           -> no filtering
         """
         if "spot" not in photon_df.columns:
-            raise ValueError("Cannot filter by beam strength: dataframe is missing a 'spot' column.")
+            raise ValueError(
+                "Cannot filter by beam strength: dataframe is missing a 'spot' column."
+            )
 
         beam_strength = self.beams or "strong"
 
@@ -566,8 +560,7 @@ class DataRequest:
             return photon_df.copy()
         else:
             raise ValueError(
-                "beams must be None, 'strong', 'weak', or 'all'. "
-                f"Got: {self.beams!r}"
+                f"beams must be None, 'strong', 'weak', or 'all'. Got: {self.beams!r}"
             )
 
         return photon_df.loc[photon_df["spot"].isin(spots)].copy()
@@ -590,8 +583,8 @@ class DataRequest:
 
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
-             # Filter ATL03 photons by beam strength.
-             # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
+            # Filter ATL03 photons by beam strength.
+            # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
             atl03_photons = self._filter_by_beam_strength(atl03_photons)
 
             self.products.append("ATL03")
@@ -641,7 +634,6 @@ class DataRequest:
 
     # variables I appear to need for icephotons dataset
 
-    
     """
     # ATL03
     for each beam in beam list: beams from beam list
