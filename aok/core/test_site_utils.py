@@ -25,7 +25,9 @@ def load_test_sites(path: str = "./test_sites.yaml") -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def get_region_by_name(name: str, sites: dict[str, Any] | None = None) -> dict[str, Any]:
+def get_region_by_name(
+    name: str, sites: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Retrieve a region configuration by name.
 
     Parameters
@@ -70,7 +72,9 @@ def check_not_null(key: Any) -> bool:
     return not (key is None or all(l is None for l in key))
 
 
-def get_bbox_shapely(lat: float, lon: float, buffer_deg: float) -> tuple[float, float, float, float]:
+def get_bbox_shapely(
+    lat: float, lon: float, buffer_deg: float
+) -> tuple[float, float, float, float]:
     """Create a bounding box around a point using Shapely.
 
     Parameters
