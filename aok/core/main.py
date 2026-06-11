@@ -8,7 +8,7 @@ from sliderule import sliderule
 import yaml
 
 # clean these up once it's determined which functions are called or not
-from aok.core.acquisition.base import DataRequest
+from aok.core.datarequest import DataRequest
 
 from .kd_utils.data_processing import (
     apply_optional_solar_background_filter,

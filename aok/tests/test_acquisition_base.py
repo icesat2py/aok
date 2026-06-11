@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from aok.core.acquisition.base import DataRequest
+from aok.core.datarequest import DataRequest
 from aok.tests.column_requirements import (
     REQUIRED_ATL03_COLUMNS,
     REQUIRED_ATL24_COLUMNS,
@@ -290,7 +290,7 @@ def test_get_atl03_data_calls_sliderule_run(
         return fake_atl03_photons
 
     monkeypatch.setattr(
-        "aok.core.acquisition.base.sliderule.run",
+        "aok.core.datarequest.sliderule.run",
         fake_run,
     )
 
@@ -318,7 +318,7 @@ def test_get_atl24_data_calls_sliderule_run(
         return fake_atl24_photons
 
     monkeypatch.setattr(
-        "aok.core.acquisition.base.sliderule.run",
+        "aok.core.datarequest.sliderule.run",
         fake_run,
     )
 
@@ -488,11 +488,11 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
         raise AssertionError(f"Unexpected SlideRule API: {api}")
 
     monkeypatch.setattr(
-        "aok.core.acquisition.base.sliderule.init",
+        "aok.core.datarequest.sliderule.init",
         fake_init,
     )
     monkeypatch.setattr(
-        "aok.core.acquisition.base.sliderule.run",
+        "aok.core.datarequest.sliderule.run",
         fake_run,
     )
 

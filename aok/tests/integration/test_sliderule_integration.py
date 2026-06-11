@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import pytest
 
-from aok.core.acquisition.base import DataRequest
+from aok.core.datarequest import DataRequest
 from aok.tests.column_requirements import REQUIRED_ATL03_COLUMNS
 
 pytestmark = pytest.mark.integration
