@@ -498,22 +498,20 @@ class DataRequest:
         ATL03_COLUMN_RENAMES are preserved unchanged.
         """
         ATL03_COLUMN_RENAMES = {
-        # SlideRule name: AOK pipeline expected name
-        "latitude": "latitude",
-        "longitude": "longitude",
-        "height": "photon_height",
-        "quality_ph": "quality_ph",
-        "atl03_cnf": "photon_conf",
-        "ref_elevation": "ref_elevation",
-        "ref_azimuth": "ref_azimuth",
-
-        # Solar background filter inputs
-        "solar_elevation": "solar_elevation",
-        "bckgrd_rate": "background_rate",
-
-        # Be cautious: this may not be equivalent to the older relative_AT_dist
-        # calculation, which adjusted x_atc by segment distance and converted to km.
-        "x_atc": "relative_AT_dist",
+            # SlideRule name: AOK pipeline expected name
+            "latitude": "latitude",
+            "longitude": "longitude",
+            "height": "photon_height",
+            "quality_ph": "quality_ph",
+            "atl03_cnf": "photon_conf",
+            "ref_elevation": "ref_elevation",
+            "ref_azimuth": "ref_azimuth",
+            # Solar background filter inputs
+            "solar_elevation": "solar_elevation",
+            "bckgrd_rate": "background_rate",
+            # Be cautious: this may not be equivalent to the older relative_AT_dist
+            # calculation, which adjusted x_atc by segment distance and converted to km.
+            "x_atc": "relative_AT_dist",
         }
         rename_map = {
             sliderule_name: pipeline_name
@@ -524,11 +522,12 @@ class DataRequest:
         print(rename_map)
 
         return atl03_photons.rename(columns=rename_map).copy()
+
     def rename_atl24_columns(self, atl24_photons: pd.DataFrame) -> pd.DataFrame:
         """
         Rename ATL24 columns from SlideRule names to the names expected by
         the existing AOK pipeline code.
-    
+
         Columns not present in the dataframe are ignored. Columns not listed in
         ATL24_COLUMN_RENAMES are preserved unchanged.
         """
@@ -536,13 +535,13 @@ class DataRequest:
             # SlideRule ATL24 name: AOK pipeline expected name
             # TBD: Fill in based on actual ATL24 output columns.
         }
-    
+
         rename_map = {
             sliderule_name: pipeline_name
             for sliderule_name, pipeline_name in ATL24_COLUMN_RENAMES.items()
             if sliderule_name in atl24_photons.columns
         }
-    
+
         return atl24_photons.rename(columns=rename_map).copy()
 
     def _filter_by_beam_strength(self, photon_df: pd.DataFrame) -> pd.DataFrame:
@@ -612,7 +611,7 @@ class DataRequest:
                 # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
                 atl24_photons = self._filter_by_beam_strength(atl24_photons)
                 # tbd uncomment when rename atl24 columns works
-                #atl24_photons = self.rename_atl24_columns(atl24_photons)
+                # atl24_photons = self.rename_atl24_columns(atl24_photons)
 
                 self.products.append("ATL24")
                 self.sources.append("sliderule")

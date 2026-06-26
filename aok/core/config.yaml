@@ -38,4 +38,3 @@ kd_fit_method: "log_linear"  # choices: log_linear, bg_subtract, breakpoint, non
 
 # Plotting
 generate_plots: false
-
