@@ -489,39 +489,7 @@ class DataRequest:
 
         return merged
 
-    ATL03_COLUMN_RENAMES = {
-        # SlideRule column name: existing-code column name
-        # Photon location / height
-        # "lat_ph": "latitude",
-        # "lon_ph": "longitude",
-        # "h_ph": "photon_height",
-        # Time
-        # "delta_time": "photon_delta_time",
-        # Along-track / across-track
-        # "dist_ph_along": "dist_ph_along",
-        # "x_atc": "relative_AT_dist",
-        # "y_atc": "dist_ph_across",
-        # Signal / quality
-        # "atl03_cnf": "signal_conf_ph",
-        # "quality_ph": "quality_ph",
-        # Solar / background
-        # "solar_elevation": "solar_elevation",
-        # "bckgrd_rate": "photon_background_rate",
-        # Geolocation fields
-        # "segment_id": "Segment_ID",
-        # "ph_index_beg": "Segment_Index_begin",
-        # "segment_ph_cnt": "Segment_PE_count",
-        # "segment_dist_x": "Equator_Segment_Distance",
-        # "segment_length": "Segment_Length",
-        # "reference_photon_lat": "segment_lat",
-        # "reference_photon_lon": "segment_lon",
-        # "ref_elev": "ref_elev",
-        # "ref_azimuth": "ref_azimuth",
-        # Geophysical correction
-        # "geoid": "geoid",
-    }
-
-    def rename_atl03_columns(atl03_photons: pd.DataFrame) -> pd.DataFrame:
+    def rename_atl03_columns(self, atl03_photons: pd.DataFrame) -> pd.DataFrame:
         """
         Rename ATL03 columns from SlideRule names to the names expected by
         the existing Kd-processing code.
@@ -529,13 +497,53 @@ class DataRequest:
         Columns not present in the dataframe are ignored. Columns not listed in
         ATL03_COLUMN_RENAMES are preserved unchanged.
         """
-        rename_map = {
-            old_name: new_name
-            for old_name, new_name in ATL03_COLUMN_RENAMES.items()
-            if old_name in atl03_photons.columns
+        ATL03_COLUMN_RENAMES = {
+        # SlideRule name: AOK pipeline expected name
+        "latitude": "latitude",
+        "longitude": "longitude",
+        "height": "photon_height",
+        "quality_ph": "quality_ph",
+        "atl03_cnf": "photon_conf",
+        "ref_elevation": "ref_elevation",
+        "ref_azimuth": "ref_azimuth",
+
+        # Solar background filter inputs
+        "solar_elevation": "solar_elevation",
+        "bckgrd_rate": "background_rate",
+
+        # Be cautious: this may not be equivalent to the older relative_AT_dist
+        # calculation, which adjusted x_atc by segment distance and converted to km.
+        "x_atc": "relative_AT_dist",
         }
+        rename_map = {
+            sliderule_name: pipeline_name
+            for sliderule_name, pipeline_name in ATL03_COLUMN_RENAMES.items()
+            if sliderule_name in atl03_photons.columns
+        }
+        print(rename_map)
+        print(rename_map)
 
         return atl03_photons.rename(columns=rename_map).copy()
+    def rename_atl24_columns(self, atl24_photons: pd.DataFrame) -> pd.DataFrame:
+        """
+        Rename ATL24 columns from SlideRule names to the names expected by
+        the existing AOK pipeline code.
+    
+        Columns not present in the dataframe are ignored. Columns not listed in
+        ATL24_COLUMN_RENAMES are preserved unchanged.
+        """
+        ATL24_COLUMN_RENAMES = {
+            # SlideRule ATL24 name: AOK pipeline expected name
+            # TBD: Fill in based on actual ATL24 output columns.
+        }
+    
+        rename_map = {
+            sliderule_name: pipeline_name
+            for sliderule_name, pipeline_name in ATL24_COLUMN_RENAMES.items()
+            if sliderule_name in atl24_photons.columns
+        }
+    
+        return atl24_photons.rename(columns=rename_map).copy()
 
     def _filter_by_beam_strength(self, photon_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -586,6 +594,7 @@ class DataRequest:
             # Filter ATL03 photons by beam strength.
             # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
             atl03_photons = self._filter_by_beam_strength(atl03_photons)
+            atl03_photons = self.rename_atl03_columns(atl03_photons)
 
             self.products.append("ATL03")
             self.sources.append("sliderule")
@@ -602,6 +611,8 @@ class DataRequest:
                 # Filter ATL24 data by beam strength.
                 # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
                 atl24_photons = self._filter_by_beam_strength(atl24_photons)
+                # tbd uncomment when rename atl24 columns works
+                #atl24_photons = self.rename_atl24_columns(atl24_photons)
 
                 self.products.append("ATL24")
                 self.sources.append("sliderule")

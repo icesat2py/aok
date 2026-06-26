@@ -524,3 +524,46 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert set(basic_request.metadata["ATL24"]["columns"]) == set(
         fake_atl24_photons.columns
     )
+def test_rename_atl03_columns_renames_sliderule_columns_to_pipeline_names():
+    request = DataRequest()
+
+    atl03_photons = pd.DataFrame(
+        {
+            "latitude": [70.0, 70.1],
+            "longitude": [-150.0, -150.1],
+            "height": [-2.0, -3.0],
+            "quality_ph": [0, 1],
+            "atl03_cnf": [4, 2],
+            "ref_elevation": [1.1, 1.2],
+            "ref_azimuth": [45.0, 46.0],
+            "x_atc": [100.0, 200.0],
+            "unmapped_column": ["keep", "me"],
+        }
+    )
+
+    renamed = request.rename_atl03_columns(atl03_photons)
+
+    expected_columns = {
+        "latitude",
+        "longitude",
+        "photon_height",
+        "quality_ph",
+        "photon_conf",
+        "ref_elevation",
+        "ref_azimuth",
+        "relative_AT_dist",
+        "unmapped_column",
+    }
+
+    assert set(renamed.columns) == expected_columns
+
+    assert "height" not in renamed.columns
+    assert "atl03_cnf" not in renamed.columns
+    assert "x_atc" not in renamed.columns
+
+    assert renamed["photon_height"].tolist() == [-2.0, -3.0]
+    assert renamed["photon_conf"].tolist() == [4, 2]
+    assert renamed["relative_AT_dist"].tolist() == [100.0, 200.0]
+
+    # Make sure columns not listed in the rename map are preserved.
+    assert renamed["unmapped_column"].tolist() == ["keep", "me"]
