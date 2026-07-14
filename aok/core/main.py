@@ -12,7 +12,10 @@ from aok.core.datarequest import DataRequest
 from aok.core.kd_utils.data_processing import (
     #apply_optional_solar_data_processing,
     apply_optional_solar_background_filter,
+    preserve_time_ns_as_column,
 )
+
+from aok.core.kd_utils.sea_photons_analysis import process_sea_photon_binning
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -145,6 +148,10 @@ def run_pipeline(args: KdConfig):
     sliderule.init("slideruleearth.io")
     sea_photon_request.get_sliderule_data()
     sea_photon_dataset = sea_photon_request.photons
+    
+    # below line is necessary otherwise solar background fails because 
+    # time_ns indicies are duplicated
+    sea_photon_dataset = preserve_time_ns_as_column(sea_photon_dataset)
 
     # commenting out shoreline filtering in main
     #   sea_photon_dataset = Extract_sea_photons(
@@ -178,50 +185,50 @@ def run_pipeline(args: KdConfig):
     )
 
     ### commented this call because binned_dataset_sea_surface is not used
-    # binned_dataset_sea_surface = process_sea_photon_binning(
-    #     sea_photon_dataset,
-    #     horizontal_res=args.horizontal_res,
-    #     vertical_res=args.vertical_res,
-    # )
+    binned_dataset_sea_surface = process_sea_photon_binning(
+         sea_photon_dataset,
+         horizontal_res=args.horizontal_res,
+         vertical_res=args.vertical_res,
+    )
 
-    # post_refraction_refit_enabled = args.enable_post_refraction_refit
-    # if post_refraction_refit_enabled and (not args.enable_refraction_correction):
-    #     logger.warning(
-    #         "--enable_post_refraction_refit requested without --enable_refraction_correction. "
-    #         "The post-refraction refit step will be skipped."
-    #     )
-    #     post_refraction_refit_enabled = False
+    post_refraction_refit_enabled = args.enable_post_refraction_refit
+    if post_refraction_refit_enabled and (not args.enable_refraction_correction):
+        logger.warning(
+            "--enable_post_refraction_refit requested without --enable_refraction_correction. "
+            "The post-refraction refit step will be skipped."
+        )
+        post_refraction_refit_enabled = False
 
-    # (
-    #     sea_surface_height,
-    #     sea_surface_label,
-    #     sea_photon_dataset,
-    # ) = process_subsurface_photon_filtering(
-    #     binned_dataset_sea_surface,
-    #     gebco_file_path_lists,
-    #     args.subsurface_thresh,
-    #     args.ignore_subsurface_height_thres,
-    #     use_atl24_filter=args.enable_atl24_filter,
-    #     atl24_file_path=atl24_file_path,
-    #     atl24_max_match_distance_deg=args.atl24_max_match_distance_deg,
-    #     use_gebco_filter=args.enable_gebco_filter,
-    #     apply_histogram_quality_filter=args.enable_histogram_quality_filter,
-    #     histogram_quality_min_ratio=args.histogram_quality_min_ratio,
-    #     histogram_quality_depth_min=args.histogram_quality_depth_min,
-    #     histogram_quality_depth_max=args.histogram_quality_depth_max,
-    #     histogram_quality_ref_depth_min=args.histogram_quality_ref_depth_min,
-    #     histogram_quality_ref_depth_max=args.histogram_quality_ref_depth_max,
-    #     apply_surface_sigma_filter=args.enable_surface_sigma_filter,
-    #     surface_sigma_max=args.surface_sigma_max,
-    #     apply_refraction_correction=args.enable_refraction_correction,
-    #     refraction_water_temp_c=args.refraction_water_temp_c,
-    #     refraction_wavelength_nm=args.refraction_wavelength_nm,
-    #     apply_post_refraction_refit=post_refraction_refit_enabled,
-    #     apply_flattening=args.enable_sea_surface_flattening,
-    #     flattening_window_m=args.sea_surface_flattening_window_m,
-    #     horizontal_res=args.horizontal_res,
-    #     vertical_res=args.vertical_res,
-    # )
+    (
+        sea_surface_height,
+        sea_surface_label,
+        filtered_seafloor_subsurface_photon_dataset,
+    ) = process_subsurface_photon_filtering(
+        binned_dataset_sea_surface,
+        gebco_file_path_lists,
+        args.subsurface_thresh,
+        args.ignore_subsurface_height_thres,
+        use_atl24_filter=args.enable_atl24_filter,
+        atl24_file_path=atl24_file_path,
+        atl24_max_match_distance_deg=args.atl24_max_match_distance_deg,
+        use_gebco_filter=args.enable_gebco_filter,
+        apply_histogram_quality_filter=args.enable_histogram_quality_filter,
+        histogram_quality_min_ratio=args.histogram_quality_min_ratio,
+        histogram_quality_depth_min=args.histogram_quality_depth_min,
+        histogram_quality_depth_max=args.histogram_quality_depth_max,
+        histogram_quality_ref_depth_min=args.histogram_quality_ref_depth_min,
+        histogram_quality_ref_depth_max=args.histogram_quality_ref_depth_max,
+        apply_surface_sigma_filter=args.enable_surface_sigma_filter,
+        surface_sigma_max=args.surface_sigma_max,
+        apply_refraction_correction=args.enable_refraction_correction,
+        refraction_water_temp_c=args.refraction_water_temp_c,
+        refraction_wavelength_nm=args.refraction_wavelength_nm,
+        apply_post_refraction_refit=post_refraction_refit_enabled,
+        apply_flattening=args.enable_sea_surface_flattening,
+        flattening_window_m=args.sea_surface_flattening_window_m,
+        horizontal_res=args.horizontal_res,
+        vertical_res=args.vertical_res,
+    )
 
     # if args.enable_convex_hull_filter:
     # final_filtered_subsurface_photon_dataset, convex_hull_areas, convex_hulls = (
