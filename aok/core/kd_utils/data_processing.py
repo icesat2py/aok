@@ -375,6 +375,56 @@ def isolate_sea_land_photons(shoreline_data_path, ICESat2_GDF):
         return -np.ones_like(ICESat2_GDF.is_land.values)
 
 
+def apply_orthometric_corrections(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Replaces create_photon_dataframe() for sliderule input datframes
+    """
+    # Apply geoid correction to the photon heights to convert them from ellipsoidal to orthometric heights
+    h_ph_geoid_cor = h_ph[:] - geoid[:]
+
+    # Determine the EPSG code for the UTM zone based on the first photon's longitude and latitude
+    epsg_code = convert_wgs_to_utm(lon_ph[0], lat_ph[0])
+
+    # Perform orthometric correction to obtain UTM coordinates and corrected heights
+    lat_utm, lon_utm, h_ph_cor = orthometric_correction(lat_ph, lon_ph, h_ph, epsg_code)
+
+    # Put the data into the dataframe
+    sea_photon_dataset = pd.DataFrame(
+        {
+            "latitude": lat_ph,
+            "longitude": lon_ph,
+            "lat": lat_utm,
+            "lon": lon_utm,
+            "photon_height": h_ph_geoid_cor,
+            "quality_ph": quality_ph,
+            "is_land_label": is_land_label_interp1d,
+            "photon_conf": signal_conf_photon,
+            "ref_elevation": ref_elev,
+            "ref_azimuth": ref_azimuth,
+            "relative_AT_dist": relative_AT_dist,
+        },
+        columns=[
+            "latitude",
+            "longitude",
+            "lat",
+            "lon",
+            "photon_height",
+            "quality_ph",
+            "is_land_label",
+            "photon_conf",
+            "ref_elevation",
+            "ref_azimuth",
+            "relative_AT_dist",
+        ],
+    )
+
+    if solar_elevation is not None:
+        sea_photon_dataset["solar_elevation"] = solar_elevation
+    if background_rate is not None:
+        sea_photon_dataset["background_rate"] = background_rate
+
+    return sea_photon_dataset
+
 def create_photon_dataframe(
     lat_ph,
     lon_ph,
@@ -628,6 +678,21 @@ def apply_optional_ir_ap_filter(
     )
     return filtered_dataset
 
+
+def preserve_time_ns_as_column(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure time_ns is a regular column and the dataframe has a unique row index.
+    """
+    df = df.copy()
+
+    if df.index.name == "time_ns":
+        df = df.reset_index()
+
+    # If the index was unnamed but still non-unique, replace it with a clean row index.
+    if not df.index.is_unique:
+        df = df.reset_index(drop=True)
+
+    return df
 
 def Extract_sea_photons(
     IS2_atl03_mds,  # dictionary from .read_granule()
