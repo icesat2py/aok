@@ -1,4 +1,4 @@
-# contains classes for data input objects and data output objects after aquisition from the cloud.
+# contains classes for data input objects and data output objects after acquisition from the cloud.
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
@@ -104,6 +104,7 @@ class DataRequest:
     date_range: tuple[str, str] | None = None
     time_range: tuple[str, str] | None = None
     beams: str | None = None
+    # output is here for compatibility with the unit tests and can otherwise be removed
     output: str = "dataframe"  # transitioned from OutputType to str, because OutputType was undefined
     download_dir: Path | None = None  # HANNAH check if properly specified
 
@@ -153,7 +154,8 @@ class DataRequest:
             This can be varied by the calling method depending on the data request.
         """
         if self.date_range is None:
-            raise ValueError("date_range is required.")
+            msg = "date_range is required."
+            raise ValueError(msg)
 
         start_date, end_date = self.date_range
 
@@ -191,9 +193,8 @@ class DataRequest:
 
         if self.output in {"dataframe", "geodataframe"}:
             if self.download_dir is None:
-                raise ValueError(
-                    "download_dir is required when output format is specified."
-                )
+                msg = "download_dir is required when output format is specified."
+                raise ValueError(msg)
 
             download_dir = Path(self.download_dir).expanduser().resolve(strict=False)
             download_dir.mkdir(parents=True, exist_ok=True)
@@ -211,7 +212,9 @@ class DataRequest:
             }
 
         if self.output is not None:
-            raise ValueError(f"Unsupported output type: {self.output}")
+            msg = f"Unsupported output type: {self.output}"
+            raise ValueError(msg)
+        return None
 
     def _cut_spatial_extent(self) -> None:
         """
@@ -226,9 +229,8 @@ class DataRequest:
         Not implemented yet. Draft implementation is below.
 
         """
-        raise NotImplementedError(
-            "_cut_spatial_extent exists but is not implemented yet."
-        )
+        msg = "_cut_spatial_extent exists but is not implemented yet."
+        raise NotImplementedError(msg)
         """
         if self.need_shoreline:
             try:
@@ -274,7 +276,7 @@ class DataRequest:
             "quality_ph": [0],  # replaces ir/ap filter
         }
 
-        ## Now adding required auxillary fields
+        ## Now adding required auxiliary fields
         """
         Note dist_ph_along is possibly already included by
         default in the x_atc which is dist_ph_along +
@@ -284,7 +286,7 @@ class DataRequest:
         """
         atl03_heights = {
             "atl03_ph_fields": [
-                "h_ph",  # Photon WGS84 Height; possilby same as "height"
+                "h_ph",  # Photon WGS84 Height; possibly same as "height"
                 "delta_time",  # "photon_delta_time" in data_processing.py
                 "dist_ph_along",
             ]
@@ -326,7 +328,7 @@ class DataRequest:
             "high_rate/backg_c",
         ]
 
-        # auxillary param notes:
+        # auxiliary param notes:
         """
         #lat_ph, # already included by default
         #lon_ph, # already included by default
@@ -433,16 +435,18 @@ class DataRequest:
         atl24_has_time_ns_column = "time_ns" in atl24_photons.columns
 
         if not atl03_has_time_ns_index and not atl03_has_time_ns_column:
-            raise ValueError(
+            msg = (
                 "Cannot merge photons: ATL03 photons are missing 'time_ns' "
                 "as both a column and an index."
             )
+            raise ValueError(msg)
 
         if not atl24_has_time_ns_index and not atl24_has_time_ns_column:
-            raise ValueError(
+            msg = (
                 "Cannot merge photons: ATL24 photons are missing 'time_ns' "
                 "as both a column and an index."
             )
+            raise ValueError(msg)
 
         if atl03_has_time_ns_index and atl24_has_time_ns_index:
             merged = atl03_photons.merge(
@@ -560,9 +564,10 @@ class DataRequest:
             photons.columns[photons.columns.duplicated()].unique().tolist()
         )
         if duplicate_columns:
-            raise ValueError(
+            msg = (
                 f"ATL03 column renaming produced duplicate columns: {duplicate_columns}"
             )
+            raise ValueError(msg)
 
         return photons
 
@@ -596,9 +601,10 @@ class DataRequest:
         "all"           -> no filtering
         """
         if "spot" not in photon_df.columns:
-            raise ValueError(
+            msg = (
                 "Cannot filter by beam strength: dataframe is missing a 'spot' column."
             )
+            raise ValueError(msg)
 
         beam_strength = self.beams or "strong"
 
@@ -609,16 +615,15 @@ class DataRequest:
         elif beam_strength == "all":
             return photon_df.copy()
         else:
-            raise ValueError(
-                f"beams must be None, 'strong', 'weak', or 'all'. Got: {self.beams!r}"
-            )
+            msg = f"beams must be None, 'strong', 'weak', or 'all'. Got: {self.beams!r}"
+            raise ValueError(msg)
 
         return photon_df.loc[photon_df["spot"].isin(spots)].copy()
 
     def get_sliderule_data(self) -> "DataRequest":
         """
         Use sliderule to get data from all sources and return
-        as a list of aquisition results
+        as a list of acquisition results
 
         """
         self.validate()
