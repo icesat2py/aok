@@ -425,6 +425,7 @@ def apply_orthometric_corrections(df: pd.DataFrame) -> pd.DataFrame:
 
     return sea_photon_dataset
 
+
 def create_photon_dataframe(
     lat_ph,
     lon_ph,
@@ -693,6 +694,7 @@ def preserve_time_ns_as_column(df: pd.DataFrame) -> pd.DataFrame:
         df = df.reset_index(drop=True)
 
     return df
+
 
 def Extract_sea_photons(
     IS2_atl03_mds,  # dictionary from .read_granule()

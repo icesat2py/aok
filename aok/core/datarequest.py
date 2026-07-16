@@ -492,30 +492,30 @@ class DataRequest:
         """
         Rename ATL03 columns from SlideRule names to the names expected by
         the existing Kd-processing code.
-    
+
         Rules
         -----
         1. If the SlideRule name and AOK pipeline name are identical, do nothing.
            Example: "latitude" -> "latitude"
-    
+
         2. If the SlideRule name and AOK pipeline name are different, rename the
            SlideRule column to the AOK pipeline name.
            Example: "height" -> "photon_height"
-    
+
         3. If the AOK pipeline name already exists in the dataframe, first preserve
            the existing column by renaming it with a "_sr" suffix, then rename the
            SlideRule column to the AOK pipeline name.
            Example:
                existing "background_rate" -> "background_rate_sr"
                "bckgrd_rate" -> "background_rate"
-    
+
         Columns not listed in ATL03_COLUMN_RENAMES are preserved unchanged.
         """
         ATL03_COLUMN_RENAMES = {
             # SlideRule name: AOK pipeline expected name
             "latitude": "latitude",
             "longitude": "longitude",
-            "spot" : "beam_id",
+            "spot": "beam_id",
             "height": "photon_height",
             "quality_ph": "quality_ph",
             "atl03_cnf": "photon_conf",
@@ -524,48 +524,48 @@ class DataRequest:
             # Solar background filter inputs
             "solar_elevation": "solar_elevation",
             "bckgrd_rate": "background_rate",
-
             # Be cautious: this may not be equivalent to the older relative_AT_dist
             # calculation, which adjusted x_atc by segment distance and converted to km.
             "x_atc": "relative_AT_dist",
         }
 
         photons = atl03_photons.copy()
-    
+
         for sliderule_name, pipeline_name in ATL03_COLUMN_RENAMES.items():
             # Column is not present, so there is nothing to rename.
             if sliderule_name not in photons.columns:
                 continue
-    
+
             # Names are already identical, so do not rename.
             if sliderule_name == pipeline_name:
                 continue
-    
+
             # If the target pipeline name already exists, preserve that existing
             # column before renaming the SlideRule column into its place.
             if pipeline_name in photons.columns:
                 sr_preserved_name = f"{pipeline_name}_sr"
-    
+
                 # Avoid overwriting an existing *_sr column.
                 suffix_number = 2
                 while sr_preserved_name in photons.columns:
                     sr_preserved_name = f"{pipeline_name}_sr{suffix_number}"
                     suffix_number += 1
-    
+
                 photons = photons.rename(columns={pipeline_name: sr_preserved_name})
-    
+
             # Now rename the SlideRule column to the AOK pipeline name.
             photons = photons.rename(columns={sliderule_name: pipeline_name})
-    
-        duplicate_columns = photons.columns[photons.columns.duplicated()].unique().tolist()
+
+        duplicate_columns = (
+            photons.columns[photons.columns.duplicated()].unique().tolist()
+        )
         if duplicate_columns:
             raise ValueError(
-                "ATL03 column renaming produced duplicate columns: "
-                f"{duplicate_columns}"
+                f"ATL03 column renaming produced duplicate columns: {duplicate_columns}"
             )
-    
+
         return photons
-    
+
     def rename_atl24_columns(self, atl24_photons: pd.DataFrame) -> pd.DataFrame:
         """
         Rename ATL24 columns from SlideRule names to the names expected by

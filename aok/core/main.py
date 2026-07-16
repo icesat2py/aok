@@ -10,17 +10,17 @@ import yaml
 # clean these up once it's determined which functions are called or not
 from aok.core.datarequest import DataRequest
 from aok.core.kd_utils.data_processing import (
-    #apply_optional_solar_data_processing,
+    # apply_optional_solar_data_processing,
     apply_optional_solar_background_filter,
     preserve_time_ns_as_column,
 )
-
 from aok.core.kd_utils.sea_photons_analysis import process_sea_photon_binning
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 # TODO: expand/constrain allowed input types (e.g. Paths, Spatial/Temporal)
 # TODO: annotate the guardrails implemented into the yaml file as comments
@@ -46,9 +46,10 @@ class KdConfig(BaseModel):
         "validate_assignment": True
     }  # checks typing if a user interactively changes a config value
 
+
 # TODO: fill in these guardrails
 def check_config_values(config: KdConfig):
-    assert config.spatial != [0,   0,   0,   0]
+    assert config.spatial != [0, 0, 0, 0]
     assert config.temporal != ["2000-01-01", "2000-01-01"]
     assert config.horizontal_res < 3000
 
@@ -106,7 +107,7 @@ def run_pipeline(args: KdConfig):
 
     ### can we get the version from SR directly? - we can specify version when calling SR
     #   match = re.search(r"_(\d{14})_", atl03_h5_file_path)
-    timestamp = args.temporal[0]    # replaces timestamp from h5 file name
+    timestamp = args.temporal[0]  # replaces timestamp from h5 file name
     #   version_match = re.search(
     #    r"ATL03_\d{14}_\d{8}_(\d{3})_\d{2}", os.path.basename(atl03_h5_file_path)
     #   )
@@ -148,8 +149,8 @@ def run_pipeline(args: KdConfig):
     sliderule.init("slideruleearth.io")
     sea_photon_request.get_sliderule_data()
     sea_photon_dataset = sea_photon_request.photons
-    
-    # below line is necessary otherwise solar background fails because 
+
+    # below line is necessary otherwise solar background fails because
     # time_ns indicies are duplicated
     sea_photon_dataset = preserve_time_ns_as_column(sea_photon_dataset)
 
@@ -186,9 +187,9 @@ def run_pipeline(args: KdConfig):
 
     ### commented this call because binned_dataset_sea_surface is not used
     binned_dataset_sea_surface = process_sea_photon_binning(
-         sea_photon_dataset,
-         horizontal_res=args.horizontal_res,
-         vertical_res=args.vertical_res,
+        sea_photon_dataset,
+        horizontal_res=args.horizontal_res,
+        vertical_res=args.vertical_res,
     )
 
     post_refraction_refit_enabled = args.enable_post_refraction_refit
