@@ -2,6 +2,10 @@
 import logging
 import os
 
+from kd_utils.sea_photons_analysis import (
+    get_sea_surface_height_adaptive,
+    horizontal_vertical_bin_dataset,
+)
 import numpy as np
 import pandas as pd
 import rasterio
@@ -9,11 +13,6 @@ from rtree import index
 from scipy.spatial import cKDTree
 from scipy.stats import norm
 from shapely.geometry import box
-
-from kd_utils.sea_photons_analysis import (
-    get_sea_surface_height_adaptive,
-    horizontal_vertical_bin_dataset,
-)
 
 
 def apply_optional_histogram_quality_filter(
