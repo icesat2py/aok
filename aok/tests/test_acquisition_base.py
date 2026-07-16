@@ -525,7 +525,6 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
         fake_atl24_photons.columns
     )
 
-
 def test_rename_atl03_columns_renames_sliderule_columns_to_pipeline_names():
     request = DataRequest()
 

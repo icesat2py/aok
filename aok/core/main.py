@@ -10,7 +10,7 @@ import yaml
 # clean these up once it's determined which functions are called or not
 from aok.core.datarequest import DataRequest
 from aok.core.kd_utils.data_processing import (
-    # apply_optional_solar_data_processing,
+    #apply_optional_solar_data_processing,
     apply_optional_solar_background_filter,
 )
 
@@ -18,7 +18,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
 
 # TODO: expand/constrain allowed input types (e.g. Paths, Spatial/Temporal)
 # TODO: annotate the guardrails implemented into the yaml file as comments
@@ -44,10 +43,9 @@ class KdConfig(BaseModel):
         "validate_assignment": True
     }  # checks typing if a user interactively changes a config value
 
-
 # TODO: fill in these guardrails
 def check_config_values(config: KdConfig):
-    assert config.spatial != [0, 0, 0, 0]
+    assert config.spatial != [0,   0,   0,   0]
     assert config.temporal != ["2000-01-01", "2000-01-01"]
     assert config.horizontal_res < 3000
 
@@ -104,17 +102,16 @@ def run_pipeline(args: KdConfig):
     check_config_values(args)
 
     ### can we get the version from SR directly? - we can specify version when calling SR
-    #  match = re.search(r"_(\d{14})_", atl03_h5_file_path)
-    timestamp = args.temporal[0]  # replaces timestamp from h5 file name
-
-    #  version_match = re.search(
+    #   match = re.search(r"_(\d{14})_", atl03_h5_file_path)
+    timestamp = args.temporal[0]    # replaces timestamp from h5 file name
+    #   version_match = re.search(
     #    r"ATL03_\d{14}_\d{8}_(\d{3})_\d{2}", os.path.basename(atl03_h5_file_path)
-    #  )
-    #  atl03_version = int(version_match.group(1)) if version_match else None
-    #  logger.info(
+    #   )
+    #   atl03_version = int(version_match.group(1)) if version_match else None
+    #   logger.info(
     #    "ATL03 version detected: %s",
     #    f"{atl03_version:03d}" if atl03_version else "unknown",
-    #  )
+    #   )
 
     # if args.enable_ir_ap_filter:
     # if atl03_version is None or atl03_version < 7:
@@ -150,9 +147,9 @@ def run_pipeline(args: KdConfig):
     sea_photon_dataset = sea_photon_request.photons
 
     # commenting out shoreline filtering in main
-    #  sea_photon_dataset = Extract_sea_photons(
+    #   sea_photon_dataset = Extract_sea_photons(
     #    is2_mds, target_strong_beams, shoreline_data_path
-    #  )
+    #   )
 
     # Step 5 — Solar background filter is ON by default.
     # It self-gates on solar_elevation so has zero effect on nighttime passes.
