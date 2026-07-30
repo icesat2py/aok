@@ -121,17 +121,6 @@ class DataRequest:
     sources: list[str] = field(default_factory=list)
     products: list[str] = field(default_factory=list)
 
-    def validate(self) -> None:
-        """
-        Placeholder validation for datarequest structure.
-        TODO:
-        - validate that spatial extent is specified correctly
-        - validate that time is specified correctly
-        - validate that download paths are coercible to type Path
-        - validate that specification is correct for either a sliderule request or icepyx request
-        """
-        return
-
     def _sliderule_time_range(self) -> tuple[str, str]:
         """Build SlideRule time range parameters
             Converts from strings to datetime objects
@@ -560,7 +549,6 @@ class DataRequest:
         as a list of acquisition results
 
         """
-        self.validate()
         sliderule.init("slideruleearth.io")
 
         atl03_photons = None

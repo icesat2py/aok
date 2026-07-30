@@ -87,26 +87,6 @@ def test_data_request_defaults():
     assert req.products == []
 
 
-"""
-Checks validation logic for DataRequest
-"""
-"""
-def test_validate_requires_date_range():
-    spatial_extent = [39.6, -76.9, 37.3, -75.6]
-    request = DataRequest(spatial= spatial_extent)
-
-    with pytest.raises(ValueError, match="date_range is required"):
-        request.validate()
-"""
-
-
-def test_validate_accepts_minimal_valid_request():
-    spatial_extent = [39.6, -76.9, 37.3, -75.6]
-    request = DataRequest(spatial=spatial_extent)
-
-    request.validate()  # should not raise
-
-
 """ methods tests """
 
 
