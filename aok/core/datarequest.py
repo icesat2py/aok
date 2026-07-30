@@ -1,4 +1,4 @@
-# contains classes for data input objects and data output objects after acquisition from the cloud.
+# pyright: reportMissingImports=false
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
@@ -113,13 +113,13 @@ class DataRequest:
     shoreline_data: Path | None = None
     land_ocean_mask: Path | None = None
 
-    options: dict[str, Any] = field(default_factory=dict)
+    options: dict[str, Any] = field(default_factory=dict[str, Any])
 
     # outputs
     photons: gpd.GeoDataFrame | pd.DataFrame | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    sources: list[str] = field(default_factory=list)
-    products: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict[str, Any])
+    sources: list[str] = field(default_factory=list[str])
+    products: list[str] = field(default_factory=list[str])
 
     def _sliderule_time_range(self) -> tuple[str, str]:
         """Build SlideRule time range parameters
@@ -129,7 +129,8 @@ class DataRequest:
         ----------
         DataRequest object
             If self.date_range is None an error is thrown.
-            If self.time_range is None, the start and end times are set to 00:00:00, and 23:59:59 by default.
+            If self.time_range is None, the start and end times are set to 00:00:00,
+            and 23:59:59 by default.
             This can be varied by the calling method depending on the data request.
         """
         if self.date_range is None:
@@ -179,7 +180,7 @@ class DataRequest:
                 print(e)
 
         print("Error loading shoreline data, original spatial extent will be used, and photons filtered after download")
-        """
+        """  # noqa: E501
 
     def build_atl03_params(self) -> dict[str, Any]:
         """
@@ -204,7 +205,7 @@ class DataRequest:
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
             "cnf": [0, 1, 2, 3, 4],
-            # "spots": [1, 3, 5], # note, functionality broken, only 1 spot or all can be pulled
+            # "spots": [1, 3, 5], # only 1 spot or all can be pulled
             "quality_ph": [0],  # replaces ir/ap filter
         }
 
@@ -308,7 +309,7 @@ class DataRequest:
         params = self.build_atl03_params()
         return sliderule.run("atl03x", params)
 
-    def get_atl24_data(self) -> pd.DataFrame:
+    def get_atl24_data(self) -> pd.DataFrame | None:
         """
         Request ATL24 data from SlideRule.
 
@@ -541,7 +542,7 @@ class DataRequest:
             msg = f"beams must be None, 'strong', 'weak', or 'all'. Got: {self.beams!r}"
             raise ValueError(msg)
 
-        return photon_df.loc[photon_df["spot"].isin(spots)].copy()
+        return pd.DataFrame(photon_df.loc[photon_df["spot"].isin(spots), :])
 
     def get_sliderule_data(self) -> "DataRequest":
         """
@@ -666,7 +667,8 @@ class DataRequest:
 
     Actual data needed:
     signal_conf_ph -
-    quality_ph - bits 0 are only ones not needed. bit 1 (value 2) = possible impulse response effect
+    quality_ph - bits 0 are only ones not needed.
+      bit 1 (value 2) = possible impulse response effect
       bit 2 (value 4) = possible TEP
 
 
