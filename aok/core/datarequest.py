@@ -205,7 +205,6 @@ class DataRequest:
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
             "cnf": [0, 1, 2, 3, 4],
-            # "spots": [1, 3, 5], # only 1 spot or all can be pulled
             "quality_ph": [0],  # replaces ir/ap filter
         }
 
