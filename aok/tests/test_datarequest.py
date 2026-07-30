@@ -1,3 +1,8 @@
+# pyright: reportMissingImports=false
+from __future__ import annotations
+
+from typing import Any
+
 import pandas as pd
 import pytest
 
@@ -10,7 +15,7 @@ from aok.tests.column_requirements import (
 
 
 @pytest.fixture
-def basic_request():
+def basic_request() -> DataRequest:
     spatial_extent = [39.6, -76.9, 37.3, -75.6]
     srextent = [
         {"lon": spatial_extent[1], "lat": spatial_extent[0]},
@@ -25,7 +30,7 @@ def basic_request():
 
 
 @pytest.fixture
-def fake_atl03_photons():
+def fake_atl03_photons() -> pd.DataFrame:
     photons = pd.DataFrame(
         {column: [None, None, None] for column in REQUIRED_ATL03_COLUMNS}
     )
@@ -39,7 +44,7 @@ def fake_atl03_photons():
 
 
 @pytest.fixture
-def fake_atl03_photons_with_gebco(fake_atl03_photons):
+def fake_atl03_photons_with_gebco(fake_atl03_photons: pd.DataFrame) -> pd.DataFrame:
     photons = fake_atl03_photons.copy()
 
     photons["gebco.fileid"] = ["gebco_1", "gebco_1", "gebco_1"]
@@ -50,7 +55,7 @@ def fake_atl03_photons_with_gebco(fake_atl03_photons):
 
 
 @pytest.fixture
-def fake_atl24_photons():
+def fake_atl24_photons() -> pd.DataFrame:
     photons = pd.DataFrame({column: [None, None] for column in REQUIRED_ATL24_COLUMNS})
     photons["time_ns"] = [1, 3]
     photons["x_atc"] = [0.0, 3.0]
@@ -60,7 +65,7 @@ def fake_atl24_photons():
     return photons.set_index("time_ns")
 
 
-def test_data_request_defaults():
+def test_data_request_defaults() -> None:
     """
     Tests if defaults are correct. Note - should revisit default choices.
     """
@@ -90,13 +95,13 @@ def test_data_request_defaults():
 """ methods tests """
 
 
-def test_sliderule_time_range_requires_dates(basic_request):
+def test_sliderule_time_range_requires_dates(basic_request: DataRequest) -> None:
     basic_request.date_range = None
-    with pytest.raises(ValueError, match="date_range is required."):
+    with pytest.raises(ValueError, match=r"date_range is required\."):
         basic_request._sliderule_time_range()
 
 
-def test_sliderule_time_range_defaults(basic_request):
+def test_sliderule_time_range_defaults(basic_request: DataRequest) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
     t0, t1 = basic_request._sliderule_time_range()
@@ -104,7 +109,7 @@ def test_sliderule_time_range_defaults(basic_request):
     assert t1 == "2018-10-26T23:59:59Z"
 
 
-def test_sliderule_time_range(basic_request):
+def test_sliderule_time_range(basic_request: DataRequest) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = ("06:00:00", "18:00:00")
     t0, t1 = basic_request._sliderule_time_range()
@@ -112,7 +117,7 @@ def test_sliderule_time_range(basic_request):
     assert t1 == "2018-10-26T18:00:00Z"
 
 
-def test_build_atl03_params_basic(basic_request):
+def test_build_atl03_params_basic(basic_request: DataRequest) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
     basic_request.beams = None
@@ -157,7 +162,7 @@ def test_build_atl03_params_basic(basic_request):
     ]
 
 
-def test_build_atl03_params_adds_gebco(basic_request):
+def test_build_atl03_params_adds_gebco(basic_request: DataRequest) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
     basic_request.beams = None
@@ -169,7 +174,7 @@ def test_build_atl03_params_adds_gebco(basic_request):
     assert params["samples"] == {"gebco": {"asset": "gebco-s3"}}
 
 
-def test_build_atl03_params_does_not_add_gebco(basic_request):
+def test_build_atl03_params_does_not_add_gebco(basic_request: DataRequest) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
     basic_request.beams = None
@@ -182,8 +187,8 @@ def test_build_atl03_params_does_not_add_gebco(basic_request):
 
 
 def test_atl03_photons_with_gebco_have_required_columns(
-    fake_atl03_photons_with_gebco,
-):
+    fake_atl03_photons_with_gebco: pd.DataFrame,
+) -> None:
     required_columns = REQUIRED_ATL03_COLUMNS.union(REQUIRED_GEBCO_COLUMNS)
 
     missing_columns = required_columns.difference(fake_atl03_photons_with_gebco.columns)
@@ -195,15 +200,15 @@ def test_atl03_photons_with_gebco_have_required_columns(
 
 
 def test_get_atl03_data_calls_sliderule_run(
-    monkeypatch,
-    basic_request,
-    fake_atl03_photons,
-):
+    monkeypatch: pytest.MonkeyPatch,
+    basic_request: DataRequest,
+    fake_atl03_photons: pd.DataFrame,
+) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
 
-    calls = []
+    calls: list[dict[str, Any]] = []
 
-    def fake_run(api, params):
+    def fake_run(api: str, params: dict[str, Any]) -> pd.DataFrame:
         calls.append({"api": api, "parms": params})
         return fake_atl03_photons
 
@@ -222,15 +227,15 @@ def test_get_atl03_data_calls_sliderule_run(
 
 
 def test_get_atl24_data_calls_sliderule_run(
-    monkeypatch,
-    basic_request,
-    fake_atl24_photons,
-):
+    monkeypatch: pytest.MonkeyPatch,
+    basic_request: DataRequest,
+    fake_atl24_photons: pd.DataFrame,
+) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
 
-    calls = []
+    calls: list[dict[str, Any]] = []
 
-    def fake_run(api, params):
+    def fake_run(api: str, params: dict[str, Any]) -> pd.DataFrame:
         calls.append({"api": api, "parms": params})
         return fake_atl24_photons
 
@@ -249,7 +254,7 @@ def test_get_atl24_data_calls_sliderule_run(
 
 
 # Beam filtering tests
-def make_spot_photon_df():
+def make_spot_photon_df() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "spot": [1, 2, 3, 4, 5, 6],
@@ -258,7 +263,7 @@ def make_spot_photon_df():
     )
 
 
-def test_filter_by_beam_strength_none_defaults_to_strong():
+def test_filter_by_beam_strength_none_defaults_to_strong() -> None:
     request = DataRequest(beams=None)
 
     result = request._filter_by_beam_strength(make_spot_photon_df())
@@ -266,7 +271,7 @@ def test_filter_by_beam_strength_none_defaults_to_strong():
     assert list(result["spot"]) == [1, 3, 5]
 
 
-def test_filter_by_beam_strength_strong_keeps_strong_spots():
+def test_filter_by_beam_strength_strong_keeps_strong_spots() -> None:
     request = DataRequest(beams="strong")
 
     result = request._filter_by_beam_strength(make_spot_photon_df())
@@ -274,7 +279,7 @@ def test_filter_by_beam_strength_strong_keeps_strong_spots():
     assert list(result["spot"]) == [1, 3, 5]
 
 
-def test_filter_by_beam_strength_weak_keeps_weak_spots():
+def test_filter_by_beam_strength_weak_keeps_weak_spots() -> None:
     request = DataRequest(beams="weak")
 
     result = request._filter_by_beam_strength(make_spot_photon_df())
@@ -282,7 +287,7 @@ def test_filter_by_beam_strength_weak_keeps_weak_spots():
     assert list(result["spot"]) == [2, 4, 6]
 
 
-def test_filter_by_beam_strength_all_keeps_all_spots():
+def test_filter_by_beam_strength_all_keeps_all_spots() -> None:
     request = DataRequest(beams="all")
 
     result = request._filter_by_beam_strength(make_spot_photon_df())
@@ -293,7 +298,9 @@ def test_filter_by_beam_strength_all_keeps_all_spots():
     )
 
 
-def test_get_sliderule_data_filters_atl03_by_beam_strength(monkeypatch):
+def test_get_sliderule_data_filters_atl03_by_beam_strength(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     request = DataRequest(
         spatial=[-70, 42, -69, 43],
         date_range=("2024-01-01", "2024-01-02"),
@@ -314,10 +321,11 @@ def test_get_sliderule_data_filters_atl03_by_beam_strength(monkeypatch):
     result_request = request.get_sliderule_data()
 
     assert list(result_request.photons["spot"]) == [2, 4, 6]
-    assert result_request.metadata["ATL03"]["n_rows"] == 3
+    atl03_nrows = 3
+    assert result_request.metadata["ATL03"]["n_rows"] == atl03_nrows
 
 
-def test_filter_by_beam_strength_rejects_invalid_value():
+def test_filter_by_beam_strength_rejects_invalid_value() -> None:
     request = DataRequest(beams="medium")
 
     with pytest.raises(ValueError, match="beams must be"):
@@ -325,10 +333,10 @@ def test_filter_by_beam_strength_rejects_invalid_value():
 
 
 def test_merge_photons_left_joins_atl24_to_atl03(
-    basic_request,
-    fake_atl03_photons,
-    fake_atl24_photons,
-):
+    basic_request: DataRequest,
+    fake_atl03_photons: pd.DataFrame,
+    fake_atl24_photons: pd.DataFrame,
+) -> None:
     merged = basic_request._merge_photons(
         atl03_photons=fake_atl03_photons,
         atl24_photons=fake_atl24_photons,
@@ -338,15 +346,17 @@ def test_merge_photons_left_joins_atl24_to_atl03(
     assert list(merged.index) == [1, 2, 3]
     assert list(merged["height"]) == [10.0, 20.0, 30.0]
     assert list(merged["atl03_cnf"]) == [1, 0, 4]
-    assert merged.loc[1, "ortho_h"] == -5.0
-    assert merged.loc[3, "ortho_h"] == 0.2
+    ortho_h1 = -5.0
+    ortho_h3 = 0.2
+    assert merged.loc[1, "ortho_h"] == ortho_h1
+    assert merged.loc[3, "ortho_h"] == ortho_h3
     assert "x_atc_atl24" in merged.columns
 
 
 def test_merge_photons_requires_time_ns_in_atl03(
-    basic_request,
-    fake_atl24_photons,
-):
+    basic_request: DataRequest,
+    fake_atl24_photons: pd.DataFrame,
+) -> None:
     atl03 = pd.DataFrame({"height": [10.0, 20.0]})
 
     with pytest.raises(
@@ -360,9 +370,9 @@ def test_merge_photons_requires_time_ns_in_atl03(
 
 
 def test_merge_photons_requires_time_ns_in_atl24(
-    basic_request,
-    fake_atl03_photons,
-):
+    basic_request: DataRequest,
+    fake_atl03_photons: pd.DataFrame,
+) -> None:
     atl24 = pd.DataFrame({"class_ph": [40, 41]})
 
     with pytest.raises(
@@ -376,11 +386,11 @@ def test_merge_photons_requires_time_ns_in_atl24(
 
 
 def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
-    monkeypatch,
-    basic_request,
-    fake_atl03_photons,
-    fake_atl24_photons,
-):
+    monkeypatch: pytest.MonkeyPatch,
+    basic_request: DataRequest,
+    fake_atl03_photons: pd.DataFrame,
+    fake_atl24_photons: pd.DataFrame,
+) -> None:
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.need_atl03 = True
     basic_request.need_atl24 = True
@@ -389,10 +399,10 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     init_calls = []
     run_calls = []
 
-    def fake_init(slidrule_url):
+    def fake_init(slidrule_url: str) -> None:
         init_calls.append(slidrule_url)
 
-    def fake_run(api, params):
+    def fake_run(api: str, params: dict[str, Any]) -> pd.DataFrame:
         run_calls.append({"api": api, "parms": params})
 
         if api == "atl03x":
@@ -432,18 +442,20 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert basic_request.sources == ["sliderule", "sliderule"]
 
     assert basic_request.metadata["ATL03"]["request_type"] == "atl03"
-    assert basic_request.metadata["ATL03"]["n_rows"] == 3
+    atl03_nrows = 3
+    assert basic_request.metadata["ATL03"]["n_rows"] == atl03_nrows
     assert set(basic_request.metadata["ATL03"]["columns"]) == set(
         fake_atl03_photons.columns
     )
     assert basic_request.metadata["ATL24"]["request_type"] == "atl24"
-    assert basic_request.metadata["ATL24"]["n_rows"] == 2
+    atl24_nrows = 2
+    assert basic_request.metadata["ATL24"]["n_rows"] == atl24_nrows
     assert set(basic_request.metadata["ATL24"]["columns"]) == set(
         fake_atl24_photons.columns
     )
 
 
-def test_rename_atl03_columns_renames_sliderule_columns_to_pipeline_names():
+def test_rename_atl03_columns_renames_sliderule_columns_to_pipeline_names() -> None:
     request = DataRequest()
 
     atl03_photons = pd.DataFrame(
