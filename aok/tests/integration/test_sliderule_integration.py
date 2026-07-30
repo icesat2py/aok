@@ -46,7 +46,6 @@ def test_sliderule_real_atl03_request_returns_photons():
             {"lon": -76.319707, "lat": 34.895786},
         ],
         date_range=("2022-04-23", "2022-04-23"),
-        output=None,
         need_atl03=True,
         need_atl24=False,
         need_gebco=False,

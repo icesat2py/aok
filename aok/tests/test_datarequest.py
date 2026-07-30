@@ -62,7 +62,7 @@ def fake_atl24_photons():
 
 def test_data_request_defaults():
     """
-    Tests if defaults are correct. Note - should revist default choices.
+    Tests if defaults are correct. Note - should revisit default choices.
     """
     req = DataRequest()
 
@@ -70,8 +70,6 @@ def test_data_request_defaults():
     assert req.date_range is None
     assert req.time_range is None
     assert req.beams is None
-    assert req.output == "dataframe"
-    assert req.download_dir is None
     assert req.need_atl03 is True
     assert req.need_atl24 is True
     assert req.need_gebco is True
@@ -112,43 +110,6 @@ def test_validate_accepts_minimal_valid_request():
 """ methods tests """
 
 
-def test_sliderule_output_params_warns_of_no_output_format(basic_request):
-    basic_request.output = None
-    with pytest.warns(
-        UserWarning,
-        match="output format was not provided. SlideRule parameters will be built without output.",
-    ):
-        params = basic_request._sliderule_output_params()
-
-
-def test_sliderule_output_params_uses_default_filename(basic_request, tmp_path):
-    basic_request.output = "geodataframe"
-    basic_request.download_dir = tmp_path
-
-    params = basic_request._sliderule_output_params()
-
-    assert params == {
-        "path": str(tmp_path / "kdOutputAsGeo.geoparquet"),
-        "format": "parquet",
-        "as_geo": True,
-        "open_on_complete": True,
-    }
-
-
-def test_sliderule_output_params_uses_custom_filename(basic_request, tmp_path):
-    basic_request.output = "geodataframe"
-    basic_request.download_dir = tmp_path
-
-    params = basic_request._sliderule_output_params("atl03_photons.geoparquet")
-
-    assert params == {
-        "path": str(tmp_path / "atl03_photons.geoparquet"),
-        "format": "parquet",
-        "as_geo": True,
-        "open_on_complete": True,
-    }
-
-
 def test_sliderule_time_range_requires_dates(basic_request):
     basic_request.date_range = None
     with pytest.raises(ValueError, match="date_range is required."):
@@ -174,7 +135,6 @@ def test_sliderule_time_range(basic_request):
 def test_build_atl03_params_basic(basic_request):
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
-    basic_request.output = None
     basic_request.beams = None
     basic_request.variables_atl03 = None
 
@@ -216,31 +176,10 @@ def test_build_atl03_params_basic(basic_request):
         "high_rate/backg_c",
     ]
 
-    assert "output" not in params
 
-
-def test_build_atl03_params_adds_file_output(basic_request, tmp_path):
+def test_build_atl03_params_adds_gebco(basic_request):
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
-    basic_request.output = "geodataframe"
-    basic_request.download_dir = tmp_path
-    basic_request.beams = None
-    basic_request.variables_atl03 = None
-
-    params = basic_request.build_atl03_params()
-
-    assert params["output"] == {
-        "path": str(tmp_path / "atl03_output.parquet"),
-        "format": "parquet",
-        "as_geo": True,
-        "open_on_complete": True,
-    }
-
-
-def test_build_atl03_params_adds_gebco(basic_request, tmp_path):
-    basic_request.date_range = ("2018-10-22", "2018-10-26")
-    basic_request.time_range = None
-    basic_request.download_dir = tmp_path
     basic_request.beams = None
     basic_request.variables_atl03 = None
     basic_request.need_gebco = True
@@ -250,10 +189,9 @@ def test_build_atl03_params_adds_gebco(basic_request, tmp_path):
     assert params["samples"] == {"gebco": {"asset": "gebco-s3"}}
 
 
-def test_build_atl03_params_does_not_add_gebco(basic_request, tmp_path):
+def test_build_atl03_params_does_not_add_gebco(basic_request):
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.time_range = None
-    basic_request.download_dir = tmp_path
     basic_request.beams = None
     basic_request.variables_atl03 = None
     basic_request.need_gebco = False
@@ -309,7 +247,6 @@ def test_get_atl24_data_calls_sliderule_run(
     fake_atl24_photons,
 ):
     basic_request.date_range = ("2018-10-22", "2018-10-26")
-    basic_request.output = None
 
     calls = []
 
@@ -465,7 +402,6 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     fake_atl24_photons,
 ):
     basic_request.date_range = ("2018-10-22", "2018-10-26")
-    basic_request.output = None
     basic_request.need_atl03 = True
     basic_request.need_atl24 = True
     basic_request.beams = "all"  # so filtering does not occur in merge test
@@ -485,7 +421,8 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
         if api == "atl24x":
             return fake_atl24_photons
 
-        raise AssertionError(f"Unexpected SlideRule API: {api}")
+        msg = f"Unexpected SlideRule API: {api}"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(
         "aok.core.datarequest.sliderule.init",

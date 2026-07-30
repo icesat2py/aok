@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 from typing import Any
-import warnings
 
 import geopandas as gpd
 import pandas as pd
@@ -20,7 +19,7 @@ class DataRequest:
     Backend request object describing what data should be acquired.
 
     DataRequest stores the user's requested spatial, temporal, product, and
-    output options in a shared format. It provides methods for building SlideRule
+    run options in a shared format. It provides methods for building SlideRule
     request parameters, fetching ATL03 and/or ATL24 data, optionally merging those
     datasets, and storing the final photon table on the request object itself.
 
@@ -45,12 +44,6 @@ class DataRequest:
         If set to "strong" spot column will be filtered for [1,3,5] (strong beams).
         If set to "weak" spot column will be filtered for [2,4,6] (weak beams).
         If set to "all" no filtering will take place.
-    output
-        Preferred output mode. Supported values are currently "dataframe" and
-        "geodataframe".
-    download_dir
-        Directory where SlideRule output files should be written when file output
-        is requested.
 
     Product flags
     -------------
@@ -104,9 +97,6 @@ class DataRequest:
     date_range: tuple[str, str] | None = None
     time_range: tuple[str, str] | None = None
     beams: str | None = None
-    # output is here for compatibility with the unit tests and can otherwise be removed
-    output: str = "dataframe"  # transitioned from OutputType to str, because OutputType was undefined
-    download_dir: Path | None = None  # HANNAH check if properly specified
 
     need_atl03: bool = True
     need_atl24: bool = True
@@ -168,53 +158,6 @@ class DataRequest:
         t0 = f"{start_date}T{start_time}Z"
         t1 = f"{end_date}T{end_time}Z"
         return t0, t1
-
-    def _sliderule_output_params(
-        self,
-        geoparquet_name: str | Path | None = None,
-    ) -> dict[str, Any] | None:
-        """Build the parameter dictionary for sliderule output location.
-
-        Parameters
-        ----------
-        geoparquet_name
-            Name of the output GeoParquet file. If None, a default filename
-            (kdOutputAsGeo.geoparquet) is used.
-            This can be varied by the calling method depending on the data
-            request.
-        """
-        if self.output is None:
-            warnings.warn(
-                "output format was not provided. SlideRule parameters will be built without output.",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
-
-        if self.output in {"dataframe", "geodataframe"}:
-            if self.download_dir is None:
-                msg = "download_dir is required when output format is specified."
-                raise ValueError(msg)
-
-            download_dir = Path(self.download_dir).expanduser().resolve(strict=False)
-            download_dir.mkdir(parents=True, exist_ok=True)
-
-            if geoparquet_name is None:
-                geoparquet_name = "kdOutputAsGeo.geoparquet"
-
-            output_path = (download_dir / Path(geoparquet_name)).resolve(strict=False)
-
-            return {
-                "path": str(output_path),
-                "format": "parquet",
-                "as_geo": True,
-                "open_on_complete": True,
-            }
-
-        if self.output is not None:
-            msg = f"Unsupported output type: {self.output}"
-            raise ValueError(msg)
-        return None
 
     def _cut_spatial_extent(self) -> None:
         """
@@ -344,11 +287,6 @@ class DataRequest:
         if self.need_gebco:
             params["samples"] = {"gebco": {"asset": "gebco-s3"}}
 
-        # Define user-sepcified output parameters
-        if self.output is not None:
-            output_params = self._sliderule_output_params("atl03_output.parquet")
-            params["output"] = output_params
-
         if self.beams is not None:
             params["beams"] = self.beams
 
@@ -367,10 +305,6 @@ class DataRequest:
             "t1": t1,
             "atl24": {"class_ph": ["bathymetry", "sea_surface"], "compact": False},
         }
-
-        output_params = self._sliderule_output_params("atl24_output.parquet")
-        if output_params is not None:
-            params["output"] = output_params
 
         if self.beams is not None:
             params["beams"] = self.beams
