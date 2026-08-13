@@ -16,4 +16,5 @@ Rtree
 scikit_learn
 scipy
 Shapely
+sliderule
 utm
