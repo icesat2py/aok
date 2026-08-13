@@ -9,10 +9,12 @@ matplotlib
 netcdf4
 numpy
 pandas
+pydantic
 pyproj
 rasterio
 Rtree
 scikit_learn
 scipy
 Shapely
+sliderule
 utm
