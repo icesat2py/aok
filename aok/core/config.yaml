@@ -1,0 +1,40 @@
+# ICESat-2 Kd Computation Configuration File
+
+# Define spatial and temporal extent
+# NOTE: leave these defaults if you'd like to enter extent from a Jupyter Notebook
+#spatial: [0,0,0,0]
+spatial: [-150.622053, 61.045382, -150.361757, 61.171146]
+#temporal: ["2000-01-01", "2000-01-01"]
+temporal: ['2025-08-21', '2025-08-22']
+
+# atl03 version (optional)
+atl03_version: None
+
+
+# Output files settings
+output_path: "./results/"
+
+# Output resolution settings
+horizontal_res: 500  # meters
+vertical_res: 0.25  # meters ??? what is this?
+
+# Analysis parameters
+# ???
+subsurface_thresh: 1.0  # threshold for photons below sea surface
+ignore_subsurface_height_thres: -6  # maximum depth threshold for Kd calculations (meters)
+
+# Solar background (bg)
+solar_bg_filter: true
+solar_elev_threshold: 6.0  # degrees
+solar_bg_median_window_deg: 10.0  # degrees of solar elevation
+solar_bg_noise_multiplier: 1.5  # ratio of actual/expected background rate
+solar_bg_min_signal_conf: 2  # minimum photon signal confidence
+
+# Decay zone detection
+decay_zone_threshold: 0.0  # fraction of peak photon count
+
+# Kd fitting method
+kd_fit_method: "log_linear"  # choices: log_linear, bg_subtract, breakpoint, nonlinear, hybrid
+
+# Plotting
+generate_plots: false
