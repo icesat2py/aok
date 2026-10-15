@@ -66,9 +66,7 @@ class DataRequest:
         Optional ATL03 product version.
     version_atl24
         Optional ATL24 product version.
-    variables_atl03
-        Optional additional ATL03 parameters or fields.
-    variables_atl24
+    atl24_fields
         Optional additional ATL24 fields.
     shoreline_data
         Optional path to shoreline data used for future spatial filtering.
@@ -107,8 +105,7 @@ class DataRequest:
     version_atl03: str | None = None
     version_atl24: str | None = None
 
-    variables_atl03: list[str] | None = None
-    variables_atl24: list[str] | None = None
+    atl24_fields: list[str] | None = None
 
     shoreline_data: Path | None = None
     land_ocean_mask: Path | None = None
@@ -279,10 +276,6 @@ class DataRequest:
         if self.beams is not None:
             params["beams"] = self.beams
 
-        # append extra atl03 parameters
-        if self.variables_atl03 is not None:
-            params.update(self.variables_atl03)
-
         return params
 
     def build_atl24_params(self) -> dict[str, Any]:
@@ -298,8 +291,8 @@ class DataRequest:
         if self.beams is not None:
             params["beams"] = self.beams
 
-        if self.variables_atl24 is not None:
-            params["atl24_fields"] = self.variables_atl24
+        if self.atl24_fields is not None:
+            params["atl24_fields"] = self.atl24_fields
 
         params.update(self.options)
         return params
