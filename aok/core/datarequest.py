@@ -146,39 +146,6 @@ class DataRequest:
         t1 = f"{end_date}T{end_time}Z"
         return t0, t1
 
-    def _cut_spatial_extent(self) -> None:
-        """
-        follows logic of spatial extent, and provided shapefiles to filter the
-        request for only ocean photons. Goal is to replace isolate_sea_land_photons
-        which currently filters the data once downloaded.
-
-        This method filters the spatial extent before any request.
-        If this filtering fails,try again once data is downloaded using
-        isolate_sea_land_photons
-
-        Not implemented yet. Draft implementation is below.
-
-        """
-        msg = "_cut_spatial_extent exists but is not implemented yet."
-        raise NotImplementedError(msg)
-        """
-        if self.need_shoreline:
-            try:
-                shorelines = gpd.read_file(self.shoreline_data, mask = self.spatial)
-
-                shorelines = shorelines.clip(self.spatial)
-                shore_cut = shorelines.union_all()
-                self.sea_extent = aoi_extent.difference(shore_cut)
-                self.sea_extent = self.sea_extent.union_all()
-
-                return None
-
-            except Exception as e:
-                print(e)
-
-        print("Error loading shoreline data, original spatial extent will be used, and photons filtered after download")
-        """  # noqa: E501
-
     def build_atl03_params(self) -> dict[str, Any]:
         """
         Builds the parameters for a sliderule.run request from
