@@ -72,9 +72,6 @@ class DataRequest:
         Optional path to shoreline data used for future spatial filtering.
     land_ocean_mask
         Optional path to land-ocean mask used for creating a shoreline mask
-    options
-        Additional keyword-style options passed through to the relevant acquisition
-        parameter builder.
 
     Result attributes
     -----------------
@@ -109,8 +106,6 @@ class DataRequest:
 
     shoreline_data: Path | None = None
     land_ocean_mask: Path | None = None
-
-    options: dict[str, Any] = field(default_factory=dict[str, Any])
 
     # outputs
     photons: gpd.GeoDataFrame | pd.DataFrame | None = None
@@ -261,7 +256,6 @@ class DataRequest:
         if self.atl24_fields is not None:
             params["atl24_fields"] = self.atl24_fields
 
-        params.update(self.options)
         return params
 
     def get_atl03_data(self) -> pd.DataFrame:

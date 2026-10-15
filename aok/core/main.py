@@ -4,23 +4,24 @@ import os
 import re
 import sys
 
-from config import get_args
-from kd_utils.bathy_processing import process_subsurface_photon_filtering
-from kd_utils.data_processing import (
+import pandas as pd
+
+from .config import get_args
+from .kd_utils.bathy_processing import process_subsurface_photon_filtering
+from .kd_utils.data_processing import (
     Extract_sea_photons,
     apply_optional_ir_ap_filter,
     apply_optional_solar_background_filter,
     filter_photon_dataset_by_hull_area,
     load_data,
 )
-from kd_utils.Kd_analysis import process_kd_calculation
-from kd_utils.sea_photons_analysis import process_sea_photon_binning
-from kd_utils.visualization import (
+from .kd_utils.Kd_analysis import process_kd_calculation
+from .kd_utils.sea_photons_analysis import process_sea_photon_binning
+from .kd_utils.visualization import (
     plot_convex_hulls,
     plot_kd_photons,
     plot_photon_quality_flags,
 )
-import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
