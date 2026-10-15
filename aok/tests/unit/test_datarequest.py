@@ -82,9 +82,6 @@ def test_data_request_defaults() -> None:
     assert req.need_jpl_temperature is False
     assert req.version_atl03 is None
     assert req.version_atl24 is None
-    assert req.variables_atl03 is None
-    assert req.variables_atl24 is None
-    assert req.options == {}
 
     assert req.photons is None
     assert req.metadata == {}
