@@ -96,7 +96,9 @@ sea_photon_dataset = fetch_and_prepare_sliderule_dataset(
     strong_beams_only=True,
 )
 
-binned = process_sea_photon_binning(sea_photon_dataset, horizontal_res=500, vertical_res=0.25)
+binned = process_sea_photon_binning(
+    sea_photon_dataset, horizontal_res=500, vertical_res=0.25
+)
 sea_h, sea_lbl, subsurface = process_subsurface_photon_filtering(
     binned, GEBCO_paths=[], subsurface_thresh=1.0, Ignore_Subsurface_Height_Thres=-6
 )

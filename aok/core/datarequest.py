@@ -1,9 +1,8 @@
-# contains classes for data input objects and data output objects after aquisition from the cloud.
+# pyright: reportMissingImports=false
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 from typing import Any
-import warnings
 
 import geopandas as gpd
 import pandas as pd
@@ -20,7 +19,7 @@ class DataRequest:
     Backend request object describing what data should be acquired.
 
     DataRequest stores the user's requested spatial, temporal, product, and
-    output options in a shared format. It provides methods for building SlideRule
+    run options in a shared format. It provides methods for building SlideRule
     request parameters, fetching ATL03 and/or ATL24 data, optionally merging those
     datasets, and storing the final photon table on the request object itself.
 
@@ -45,12 +44,6 @@ class DataRequest:
         If set to "strong" spot column will be filtered for [1,3,5] (strong beams).
         If set to "weak" spot column will be filtered for [2,4,6] (weak beams).
         If set to "all" no filtering will take place.
-    output
-        Preferred output mode. Supported values are currently "dataframe" and
-        "geodataframe".
-    download_dir
-        Directory where SlideRule output files should be written when file output
-        is requested.
 
     Product flags
     -------------
@@ -73,17 +66,12 @@ class DataRequest:
         Optional ATL03 product version.
     version_atl24
         Optional ATL24 product version.
-    variables_atl03
-        Optional additional ATL03 parameters or fields.
-    variables_atl24
+    atl24_fields
         Optional additional ATL24 fields.
     shoreline_data
         Optional path to shoreline data used for future spatial filtering.
     land_ocean_mask
         Optional path to land-ocean mask used for creating a shoreline mask
-    options
-        Additional keyword-style options passed through to the relevant acquisition
-        parameter builder.
 
     Result attributes
     -----------------
@@ -104,8 +92,6 @@ class DataRequest:
     date_range: tuple[str, str] | None = None
     time_range: tuple[str, str] | None = None
     beams: str | None = None
-    output: str = "dataframe"  # transitioned from OutputType to str, because OutputType was undefined
-    download_dir: Path | None = None  # HANNAH check if properly specified
 
     need_atl03: bool = True
     need_atl24: bool = True
@@ -116,30 +102,16 @@ class DataRequest:
     version_atl03: str | None = None
     version_atl24: str | None = None
 
-    variables_atl03: list[str] | None = None
-    variables_atl24: list[str] | None = None
+    atl24_fields: list[str] | None = None
 
     shoreline_data: Path | None = None
     land_ocean_mask: Path | None = None
 
-    options: dict[str, Any] = field(default_factory=dict)
-
     # outputs
     photons: gpd.GeoDataFrame | pd.DataFrame | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    sources: list[str] = field(default_factory=list)
-    products: list[str] = field(default_factory=list)
-
-    def validate(self) -> None:
-        """
-        Placeholder validation for datarequest structure.
-        TODO:
-        - validate that spatial extent is specified correctly
-        - validate that time is specified correctly
-        - validate that download paths are coercible to type Path
-        - validate that specification is correct for either a sliderule request or icepyx request
-        """
-        return
+    metadata: dict[str, Any] = field(default_factory=dict[str, Any])
+    sources: list[str] = field(default_factory=list[str])
+    products: list[str] = field(default_factory=list[str])
 
     def _sliderule_time_range(self) -> tuple[str, str]:
         """Build SlideRule time range parameters
@@ -149,11 +121,13 @@ class DataRequest:
         ----------
         DataRequest object
             If self.date_range is None an error is thrown.
-            If self.time_range is None, the start and end times are set to 00:00:00, and 23:59:59 by default.
+            If self.time_range is None, the start and end times are set to 00:00:00,
+            and 23:59:59 by default.
             This can be varied by the calling method depending on the data request.
         """
         if self.date_range is None:
-            raise ValueError("date_range is required.")
+            msg = "date_range is required."
+            raise ValueError(msg)
 
         start_date, end_date = self.date_range
 
@@ -166,86 +140,6 @@ class DataRequest:
         t0 = f"{start_date}T{start_time}Z"
         t1 = f"{end_date}T{end_time}Z"
         return t0, t1
-
-    def _sliderule_output_params(
-        self,
-        geoparquet_name: str | Path | None = None,
-    ) -> dict[str, Any] | None:
-        """Build the parameter dictionary for sliderule output location.
-
-        Parameters
-        ----------
-        geoparquet_name
-            Name of the output GeoParquet file. If None, a default filename
-            (kdOutputAsGeo.geoparquet) is used.
-            This can be varied by the calling method depending on the data
-            request.
-        """
-        if self.output is None:
-            warnings.warn(
-                "output format was not provided. SlideRule parameters will be built without output.",
-                UserWarning,
-                stacklevel=2,
-            )
-            return None
-
-        if self.output in {"dataframe", "geodataframe"}:
-            if self.download_dir is None:
-                raise ValueError(
-                    "download_dir is required when output format is specified."
-                )
-
-            download_dir = Path(self.download_dir).expanduser().resolve(strict=False)
-            download_dir.mkdir(parents=True, exist_ok=True)
-
-            if geoparquet_name is None:
-                geoparquet_name = "kdOutputAsGeo.geoparquet"
-
-            output_path = (download_dir / Path(geoparquet_name)).resolve(strict=False)
-
-            return {
-                "path": str(output_path),
-                "format": "parquet",
-                "as_geo": True,
-                "open_on_complete": True,
-            }
-
-        if self.output is not None:
-            raise ValueError(f"Unsupported output type: {self.output}")
-
-    def _cut_spatial_extent(self) -> None:
-        """
-        follows logic of spatial extent, and provided shapefiles to filter the
-        request for only ocean photons. Goal is to replace isolate_sea_land_photons
-        which currently filters the data once downloaded.
-
-        This method filters the spatial extent before any request.
-        If this filtering fails,try again once data is downloaded using
-        isolate_sea_land_photons
-
-        Not implemented yet. Draft implementation is below.
-
-        """
-        raise NotImplementedError(
-            "_cut_spatial_extent exists but is not implemented yet."
-        )
-        """
-        if self.need_shoreline:
-            try:
-                shorelines = gpd.read_file(self.shoreline_data, mask = self.spatial)
-
-                shorelines = shorelines.clip(self.spatial)
-                shore_cut = shorelines.union_all()
-                self.sea_extent = aoi_extent.difference(shore_cut)
-                self.sea_extent = self.sea_extent.union_all()
-
-                return None
-
-            except Exception as e:
-                print(e)
-
-        print("Error loading shoreline data, original spatial extent will be used, and photons filtered after download")
-        """
 
     def build_atl03_params(self) -> dict[str, Any]:
         """
@@ -270,11 +164,10 @@ class DataRequest:
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
             "cnf": [0, 1, 2, 3, 4],
-            # "spots": [1, 3, 5], # note, functionality broken, only 1 spot or all can be pulled
             "quality_ph": [0],  # replaces ir/ap filter
         }
 
-        ## Now adding required auxillary fields
+        ## Now adding required auxiliary fields
         """
         Note dist_ph_along is possibly already included by
         default in the x_atc which is dist_ph_along +
@@ -284,7 +177,7 @@ class DataRequest:
         """
         atl03_heights = {
             "atl03_ph_fields": [
-                "h_ph",  # Photon WGS84 Height; possilby same as "height"
+                "h_ph",  # Photon WGS84 Height; possibly same as "height"
                 "delta_time",  # "photon_delta_time" in data_processing.py
                 "dist_ph_along",
             ]
@@ -326,7 +219,7 @@ class DataRequest:
             "high_rate/backg_c",
         ]
 
-        # auxillary param notes:
+        # auxiliary param notes:
         """
         #lat_ph, # already included by default
         #lon_ph, # already included by default
@@ -342,17 +235,8 @@ class DataRequest:
         if self.need_gebco:
             params["samples"] = {"gebco": {"asset": "gebco-s3"}}
 
-        # Define user-sepcified output parameters
-        if self.output is not None:
-            output_params = self._sliderule_output_params("atl03_output.parquet")
-            params["output"] = output_params
-
         if self.beams is not None:
             params["beams"] = self.beams
-
-        # append extra atl03 parameters
-        if self.variables_atl03 is not None:
-            params.update(self.variables_atl03)
 
         return params
 
@@ -366,24 +250,19 @@ class DataRequest:
             "atl24": {"class_ph": ["bathymetry", "sea_surface"], "compact": False},
         }
 
-        output_params = self._sliderule_output_params("atl24_output.parquet")
-        if output_params is not None:
-            params["output"] = output_params
-
         if self.beams is not None:
             params["beams"] = self.beams
 
-        if self.variables_atl24 is not None:
-            params["atl24_fields"] = self.variables_atl24
+        if self.atl24_fields is not None:
+            params["atl24_fields"] = self.atl24_fields
 
-        params.update(self.options)
         return params
 
     def get_atl03_data(self) -> pd.DataFrame:
         params = self.build_atl03_params()
         return sliderule.run("atl03x", params)
 
-    def get_atl24_data(self) -> pd.DataFrame:
+    def get_atl24_data(self) -> pd.DataFrame | None:
         """
         Request ATL24 data from SlideRule.
 
@@ -433,16 +312,18 @@ class DataRequest:
         atl24_has_time_ns_column = "time_ns" in atl24_photons.columns
 
         if not atl03_has_time_ns_index and not atl03_has_time_ns_column:
-            raise ValueError(
+            msg = (
                 "Cannot merge photons: ATL03 photons are missing 'time_ns' "
                 "as both a column and an index."
             )
+            raise ValueError(msg)
 
         if not atl24_has_time_ns_index and not atl24_has_time_ns_column:
-            raise ValueError(
+            msg = (
                 "Cannot merge photons: ATL24 photons are missing 'time_ns' "
                 "as both a column and an index."
             )
+            raise ValueError(msg)
 
         if atl03_has_time_ns_index and atl24_has_time_ns_index:
             merged = atl03_photons.merge(
@@ -560,9 +441,10 @@ class DataRequest:
             photons.columns[photons.columns.duplicated()].unique().tolist()
         )
         if duplicate_columns:
-            raise ValueError(
+            msg = (
                 f"ATL03 column renaming produced duplicate columns: {duplicate_columns}"
             )
+            raise ValueError(msg)
 
         return photons
 
@@ -596,9 +478,10 @@ class DataRequest:
         "all"           -> no filtering
         """
         if "spot" not in photon_df.columns:
-            raise ValueError(
+            msg = (
                 "Cannot filter by beam strength: dataframe is missing a 'spot' column."
             )
+            raise ValueError(msg)
 
         beam_strength = self.beams or "strong"
 
@@ -609,19 +492,17 @@ class DataRequest:
         elif beam_strength == "all":
             return photon_df.copy()
         else:
-            raise ValueError(
-                f"beams must be None, 'strong', 'weak', or 'all'. Got: {self.beams!r}"
-            )
+            msg = f"beams must be None, 'strong', 'weak', or 'all'. Got: {self.beams!r}"
+            raise ValueError(msg)
 
-        return photon_df.loc[photon_df["spot"].isin(spots)].copy()
+        return pd.DataFrame(photon_df.loc[photon_df["spot"].isin(spots), :])
 
     def get_sliderule_data(self) -> "DataRequest":
         """
         Use sliderule to get data from all sources and return
-        as a list of aquisition results
+        as a list of acquisition results
 
         """
-        self.validate()
         sliderule.init("slideruleearth.io")
 
         atl03_photons = None
@@ -739,7 +620,8 @@ class DataRequest:
 
     Actual data needed:
     signal_conf_ph -
-    quality_ph - bits 0 are only ones not needed. bit 1 (value 2) = possible impulse response effect
+    quality_ph - bits 0 are only ones not needed.
+      bit 1 (value 2) = possible impulse response effect
       bit 2 (value 4) = possible TEP
 
 

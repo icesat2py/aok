@@ -1,3 +1,6 @@
+# pyright: reportMissingImports=false
+from __future__ import annotations
+
 import os
 
 import pandas as pd
@@ -36,7 +39,7 @@ def missing_required_fields(
 
 
 @requires_sliderule
-def test_sliderule_real_atl03_request_returns_photons():
+def test_sliderule_real_atl03_request_returns_photons() -> None:
     request = DataRequest(
         spatial=[
             {"lon": -76.319707, "lat": 34.895786},
@@ -46,7 +49,6 @@ def test_sliderule_real_atl03_request_returns_photons():
             {"lon": -76.319707, "lat": 34.895786},
         ],
         date_range=("2022-04-23", "2022-04-23"),
-        output=None,
         need_atl03=True,
         need_atl24=False,
         need_gebco=False,
