@@ -7,15 +7,14 @@ The test setup is based on the "Calculate Kd from SlideRule" section of
 compare_run_pipelines.ipynb and uses spatial/temporal inputs from test_sites.yaml.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from datetime import datetime
-from shapely.geometry import Point
-import yaml
 
 import aok.main
+import numpy as np
+import pandas as pd
+import pytest
+from shapely.geometry import Point
+import yaml
 
 
 # Helper functions for loading test site configuration
@@ -39,8 +38,7 @@ def check_not_null(key):
     """Check if a configuration key is not null."""
     if key is None or all(l is None for l in key):
         return False
-    else:
-        return True
+    return True
 
 
 def get_bbox_shapely(lat, lon, buffer_deg) -> list:
@@ -64,29 +62,27 @@ def spatial_extent(test_site_config):
     spatial = test_site_config["spatial_extent"]
     if check_not_null(spatial["bbox"]):
         return spatial["bbox"]
-    elif check_not_null(spatial["latlon"]):
+    if check_not_null(spatial["latlon"]):
         return get_bbox_shapely(
-            spatial["latlon"][0],
-            spatial["latlon"][1],
-            spatial["buffer"]
+            spatial["latlon"][0], spatial["latlon"][1], spatial["buffer"]
         )
-    else:
-        raise ValueError("Missing spatial extent in test site config")
+    raise ValueError("Missing spatial extent in test site config")
 
 
 @pytest.fixture
 def temporal_extent(test_site_config):
     """Extract temporal extent from test site configuration."""
-    if any([
-        check_not_null(test_site_config["dates"]["start"]),
-        check_not_null(test_site_config["dates"]["end"])
-    ]):
+    if any(
+        [
+            check_not_null(test_site_config["dates"]["start"]),
+            check_not_null(test_site_config["dates"]["end"]),
+        ]
+    ):
         return [
             test_site_config["dates"]["start"],
             test_site_config["dates"]["end"],
         ]
-    else:
-        raise ValueError("Missing temporal inputs in test site config")
+    raise ValueError("Missing temporal inputs in test site config")
 
 
 @pytest.fixture
@@ -94,7 +90,6 @@ def truth_data():
     """Load truth CSV with expected Kd values."""
     truth_path = Path(__file__).parent / "kd_ref.csv"
     return pd.read_csv(truth_path)
-
 
 
 @pytest.fixture
@@ -124,14 +119,12 @@ def test_kd_calculation(kd_result):
         assert col in result.columns, f"Missing expected column: {col}"
 
 
-
 def test_kd_values_within_range(kd_result):
     """Test that calculated Kd values are within realistic ranges."""
     result = kd_result
     # Check Kd values are within realistic range for water (typically 0.01 to 2.0)
     assert (result["kd"] > 0).all(), "Found non-positive Kd values"
     assert (result["kd"] < 2.0).all(), "Found Kd values > 2.0 (unrealistic)"
-
 
 
 def test_kd_matches_truth_values(kd_result, truth_data):
@@ -152,7 +145,7 @@ def test_kd_matches_truth_values(kd_result, truth_data):
         result["kd"].values,
         truth_data["kd"].values,
         rtol=0.05,
-        err_msg="Calculated Kd values do not match truth values within tolerance"
+        err_msg="Calculated Kd values do not match truth values within tolerance",
     )
 
     # Verify photon locations match (should be exact)
