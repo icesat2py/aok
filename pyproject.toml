@@ -146,6 +146,9 @@ ignore = [
 # Ignore too many leading '#' for block comment
 # "*/tests/*" = ["E266"]
 
+# Ignore magic value comparisons (e.g. numbers instead of named variables) in tests
+"*/tests/*" = ["PLR2004"]
+
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
 
