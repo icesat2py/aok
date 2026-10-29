@@ -369,37 +369,6 @@ class DataRequest:
 
         return merged
 
-    def rename_atl03_columns(self, atl03_photons: pd.DataFrame) -> pd.DataFrame:
-        """Keep SlideRule column names intact.
-
-        The downstream scientific code should consume the native SlideRule
-        schema directly instead of remapping field names back into a project-local
-        convention. This keeps the acquisition layer faithful to the source data
-        and reduces aliasing churn during the modular transition.
-        """
-        return atl03_photons.copy()
-
-    def rename_atl24_columns(self, atl24_photons: pd.DataFrame) -> pd.DataFrame:
-        """
-        Rename ATL24 columns from SlideRule names to the names expected by
-        the existing AOK pipeline code.
-
-        Columns not present in the dataframe are ignored. Columns not listed in
-        ATL24_COLUMN_RENAMES are preserved unchanged.
-        """
-        ATL24_COLUMN_RENAMES = {
-            # SlideRule ATL24 name: AOK pipeline expected name
-            # TBD: Fill in based on actual ATL24 output columns.
-        }
-
-        rename_map = {
-            sliderule_name: pipeline_name
-            for sliderule_name, pipeline_name in ATL24_COLUMN_RENAMES.items()
-            if sliderule_name in atl24_photons.columns
-        }
-
-        return atl24_photons.rename(columns=rename_map).copy()
-
     def _filter_by_beam_strength(self, photon_df: pd.DataFrame) -> pd.DataFrame:
         """
         Filter photon dataframe by ICESat-2 beam strength.
@@ -448,20 +417,13 @@ class DataRequest:
             # Filter ATL03 photons by beam strength.
             # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
             atl03_photons = self._filter_by_beam_strength(atl03_photons)
-            atl03_metadata_columns = list(atl03_photons.columns)
-            atl03_photons = self.rename_atl03_columns(atl03_photons)
-            if (
-                "photon_height" in atl03_photons.columns
-                and "height" not in atl03_photons.columns
-            ):
-                atl03_photons["height"] = atl03_photons["photon_height"]
 
             self.products.append("ATL03")
             self.sources.append("sliderule")
             self.metadata["ATL03"] = {
                 "request_type": "atl03",
                 "n_rows": len(atl03_photons),
-                "columns": atl03_metadata_columns,
+                "columns": list(atl03_photons.columns),
             }
 
         if self.need_atl24:
@@ -471,8 +433,6 @@ class DataRequest:
                 # Filter ATL24 data by beam strength.
                 # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
                 atl24_photons = self._filter_by_beam_strength(atl24_photons)
-                # tbd uncomment when rename atl24 columns works
-                # atl24_photons = self.rename_atl24_columns(atl24_photons)
 
                 self.products.append("ATL24")
                 self.sources.append("sliderule")

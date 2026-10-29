@@ -62,7 +62,7 @@ def fake_atl24_photons():
 
 def test_data_request_defaults():
     """
-    Tests if defaults are correct. Note - should revist default choices.
+    Tests if defaults are correct. Note - should revisit default choices.
     """
     req = DataRequest()
 
@@ -109,16 +109,19 @@ def test_validate_accepts_minimal_valid_request():
     request.validate()  # should not raise
 
 
-""" methods tests """
+# Method tests
 
 
 def test_sliderule_output_params_warns_of_no_output_format(basic_request):
     basic_request.output = None
     with pytest.warns(
         UserWarning,
-        match="output format was not provided. SlideRule parameters will be built without output.",
+        match=(
+            "output format was not provided. SlideRule parameters will be "
+            "built without output."
+        ),
     ):
-        params = basic_request._sliderule_output_params()
+        basic_request._sliderule_output_params()
 
 
 def test_sliderule_output_params_uses_default_filename(basic_request, tmp_path):
@@ -151,7 +154,7 @@ def test_sliderule_output_params_uses_custom_filename(basic_request, tmp_path):
 
 def test_sliderule_time_range_requires_dates(basic_request):
     basic_request.date_range = None
-    with pytest.raises(ValueError, match="date_range is required."):
+    with pytest.raises(ValueError, match=r"date_range is required\."):
         basic_request._sliderule_time_range()
 
 
@@ -485,7 +488,8 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
         if api == "atl24x":
             return fake_atl24_photons
 
-        raise AssertionError(f"Unexpected SlideRule API: {api}")
+        msg = f"Unexpected SlideRule API: {api}"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(
         "aok.core.datarequest.sliderule.init",
@@ -509,6 +513,10 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert "height" in basic_request.photons.columns
     assert "class_ph" in basic_request.photons.columns
     assert "x_atc_atl24" in basic_request.photons.columns
+    assert "atl03_cnf" in basic_request.photons.columns
+    assert "photon_height" not in basic_request.photons.columns
+    assert "photon_conf" not in basic_request.photons.columns
+    assert "relative_AT_dist" not in basic_request.photons.columns
     assert list(basic_request.photons["class_ph"].isna()) == [False, True, False]
 
     assert basic_request.products == ["ATL03", "ATL24"]
@@ -524,48 +532,3 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert set(basic_request.metadata["ATL24"]["columns"]) == set(
         fake_atl24_photons.columns
     )
-
-
-def test_rename_atl03_columns_renames_sliderule_columns_to_pipeline_names():
-    request = DataRequest()
-
-    atl03_photons = pd.DataFrame(
-        {
-            "latitude": [70.0, 70.1],
-            "longitude": [-150.0, -150.1],
-            "height": [-2.0, -3.0],
-            "quality_ph": [0, 1],
-            "atl03_cnf": [4, 2],
-            "ref_elevation": [1.1, 1.2],
-            "ref_azimuth": [45.0, 46.0],
-            "x_atc": [100.0, 200.0],
-            "unmapped_column": ["keep", "me"],
-        }
-    )
-
-    renamed = request.rename_atl03_columns(atl03_photons)
-
-    expected_columns = {
-        "latitude",
-        "longitude",
-        "photon_height",
-        "quality_ph",
-        "photon_conf",
-        "ref_elevation",
-        "ref_azimuth",
-        "relative_AT_dist",
-        "unmapped_column",
-    }
-
-    assert set(renamed.columns) == expected_columns
-
-    assert "height" not in renamed.columns
-    assert "atl03_cnf" not in renamed.columns
-    assert "x_atc" not in renamed.columns
-
-    assert renamed["photon_height"].tolist() == [-2.0, -3.0]
-    assert renamed["photon_conf"].tolist() == [4, 2]
-    assert renamed["relative_AT_dist"].tolist() == [100.0, 200.0]
-
-    # Make sure columns not listed in the rename map are preserved.
-    assert renamed["unmapped_column"].tolist() == ["keep", "me"]
