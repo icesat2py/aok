@@ -158,5 +158,8 @@ cython_debug/
 # VSCode
 .vscode/
 
+# macOS
+*.DS_Store
+
 # icepyx
 .order_restart
