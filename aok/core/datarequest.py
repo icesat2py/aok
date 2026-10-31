@@ -113,6 +113,11 @@ class DataRequest:
     sources: list[str] = field(default_factory=list[str])
     products: list[str] = field(default_factory=list[str])
 
+    # TODO manage spatial input types (probably in config.py?)
+    # to pass something predictable in to DataRequest (possibly use icepyx for this?)
+    def _sliderule_spatial_format(self):
+        return sliderule.toregion(source=self.spatial)
+
     def _sliderule_time_range(self) -> tuple[str, str]:
         """Build SlideRule time range parameters
             Converts from strings to datetime objects
@@ -159,7 +164,7 @@ class DataRequest:
         """
 
         params: dict[str, Any] = {
-            "poly": self.spatial,
+            "poly": self._sliderule_spatial_format()["poly"],
             "t0": t0,  # from time range convert function
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
@@ -416,7 +421,7 @@ class DataRequest:
             atl03_photons = self.get_atl03_data()
             # Filter ATL03 photons by beam strength.
             # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
-            atl03_photons = self._filter_by_beam_strength(atl03_photons)
+            # atl03_photons = self._filter_by_beam_strength(atl03_photons)
 
             self.products.append("ATL03")
             self.sources.append("sliderule")
