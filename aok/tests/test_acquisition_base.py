@@ -74,7 +74,7 @@ def test_data_request_defaults():
     assert req.download_dir is None
     assert req.need_atl03 is True
     assert req.need_atl24 is True
-    assert req.need_gebco is True
+    assert req.get_gebco is True
     assert req.need_shoreline is True
     assert req.need_jpl_temperature is False
     assert req.version_atl03 is None
@@ -246,7 +246,7 @@ def test_build_atl03_params_adds_gebco(basic_request, tmp_path):
     basic_request.download_dir = tmp_path
     basic_request.beams = None
     basic_request.variables_atl03 = None
-    basic_request.need_gebco = True
+    basic_request.get_gebco = True
 
     params = basic_request.build_atl03_params()
 
@@ -259,7 +259,7 @@ def test_build_atl03_params_does_not_add_gebco(basic_request, tmp_path):
     basic_request.download_dir = tmp_path
     basic_request.beams = None
     basic_request.variables_atl03 = None
-    basic_request.need_gebco = False
+    basic_request.get_gebco = False
 
     params = basic_request.build_atl03_params()
 
@@ -385,22 +385,26 @@ def test_get_sliderule_data_filters_atl03_by_beam_strength(monkeypatch):
         date_range=("2024-01-01", "2024-01-02"),
         need_atl03=True,
         need_atl24=False,
+        get_gebco=False,
         beams="weak",
     )
 
     raw_atl03 = pd.DataFrame(
         {
+            "time_ns": [1, 2, 3, 4, 5, 6],
             "spot": [1, 2, 3, 4, 5, 6],
             "height": [-1.0, -2.0, -3.0, -4.0, -5.0, -6.0],
+            "high_rate/backg_c": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
         }
     )
 
     monkeypatch.setattr(request, "get_atl03_data", lambda: raw_atl03)
 
-    result_request = request.get_sliderule_data()
+    result = request.get_sliderule_data()
 
-    assert list(result_request.photons["spot"]) == [2, 4, 6]
-    assert result_request.metadata["ATL03"]["n_rows"] == 3
+    assert result is not None
+    assert list(result["spot"]) == [2, 4, 6]
+    assert request.metadata["ATL03"]["n_rows"] == 3
 
 
 def test_filter_by_beam_strength_rejects_invalid_value():
@@ -502,25 +506,25 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
 
     result = basic_request.get_sliderule_data()
 
-    assert result is basic_request
+    assert result is basic_request.photons
 
     assert init_calls == ["slideruleearth.io"]
     assert [call["api"] for call in run_calls] == ["atl03x", "atl24x"]
 
     assert basic_request.photons is not None
-    assert list(basic_request.photons.index) == [1, 2, 3]
-    assert "x_atc" in basic_request.photons.columns
-    assert "height" in basic_request.photons.columns
-    assert "class_ph" in basic_request.photons.columns
-    assert "x_atc_atl24" in basic_request.photons.columns
-    assert "atl03_cnf" in basic_request.photons.columns
-    assert "photon_height" not in basic_request.photons.columns
-    assert "photon_conf" not in basic_request.photons.columns
-    assert "relative_AT_dist" not in basic_request.photons.columns
-    assert list(basic_request.photons["class_ph"].isna()) == [False, True, False]
+    assert list(result.index) == [1, 2, 3]
+    assert "x_atc" in result.columns
+    assert "height" in result.columns
+    assert "class_ph" in result.columns
+    assert "x_atc_atl24" in result.columns
+    assert "atl03_cnf" in result.columns
+    assert "photon_height" not in result.columns
+    assert "photon_conf" not in result.columns
+    assert "relative_AT_dist" not in result.columns
+    assert list(result["class_ph"].isna()) == [False, True, False]
 
-    assert basic_request.products == ["ATL03", "ATL24"]
-    assert basic_request.sources == ["sliderule", "sliderule"]
+    assert basic_request.products == ["ATL03", "ATL09", "ATL24"]
+    assert basic_request.sources == ["sliderule", "sliderule", "sliderule"]
 
     assert basic_request.metadata["ATL03"]["request_type"] == "atl03"
     assert basic_request.metadata["ATL03"]["n_rows"] == 3

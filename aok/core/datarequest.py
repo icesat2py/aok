@@ -51,7 +51,7 @@ class DataRequest:
         Whether ATL03 photon data should be requested.
     need_atl24
         Whether ATL24 bathymetry-classified photon data should be requested.
-    need_gebco
+    get_gebco
         Whether GEBCO bathymetry samples should be requested with ATL03.
     need_shoreline
         Whether shoreline data should be used for spatial filtering. This behavior
@@ -95,7 +95,7 @@ class DataRequest:
 
     need_atl03: bool = True
     need_atl24: bool = True
-    need_gebco: bool = True
+    get_gebco: bool = True
     need_shoreline: bool = True
     need_jpl_temperature: bool = False
 
@@ -115,7 +115,7 @@ class DataRequest:
 
     # TODO manage spatial input types (probably in config.py?)
     # to pass something predictable in to DataRequest (possibly use icepyx for this?)
-    def _sliderule_spatial_format(self):
+    def _sliderule_spatial_format(self) -> list:
         return sliderule.toregion(source=self.spatial)
 
     def _sliderule_time_range(self) -> tuple[str, str]:
@@ -237,7 +237,7 @@ class DataRequest:
         # Add optional call to gebco;
         # returns three columns gebco.fileid, gebco.time_ns
         # and gebco.value
-        if self.need_gebco:
+        if self.get_gebco:
             params["samples"] = {"gebco": {"asset": "gebco-s3"}}
 
         if self.beams is not None:
@@ -263,7 +263,7 @@ class DataRequest:
 
         return params
 
-    def get_atl03_data(self) -> pd.DataFrame:
+    def get_atl03_data(self) -> pd.DataFrame | None:
         params = self.build_atl03_params()
         return sliderule.run("atl03x", params)
 
@@ -298,6 +298,20 @@ class DataRequest:
 
         return atl24
 
+    # evaluate if this is needed, given I don't think SR would return data without it
+    @staticmethod
+    def _require_fields(
+        product: str,
+        frame: pd.DataFrame,
+        fields: set[str],
+    ) -> None:
+        missing = fields.difference(frame.columns)
+        if "time_ns" in missing and frame.index.name == "time_ns":
+            missing.remove("time_ns")
+        if missing:
+            msg = f"{product} response is missing required fields: {sorted(missing)}"
+            raise ValueError(msg)
+
     def _merge_photons(
         self,
         atl03_photons: pd.DataFrame,
@@ -327,6 +341,17 @@ class DataRequest:
             msg = (
                 "Cannot merge photons: ATL24 photons are missing 'time_ns' "
                 "as both a column and an index."
+            )
+            raise ValueError(msg)
+
+        # Confirm whether this is needed; time uniqueness has been an ongoing issue.
+        atl24_time = (
+            atl24_photons.index if atl24_has_time_ns_index else atl24_photons["time_ns"]
+        )
+        if atl24_time.has_duplicates:
+            msg = (
+                "Cannot merge ATL24: 'time_ns' is not unique. "
+                "Confirm the product matching key before merging."
             )
             raise ValueError(msg)
 
@@ -402,12 +427,8 @@ class DataRequest:
 
         return pd.DataFrame(photon_df.loc[photon_df["spot"].isin(spots), :])
 
-    def get_sliderule_data(self) -> "DataRequest":
-        """
-        Use sliderule to get data from all sources and return
-        as a list of acquisition results
-
-        """
+    def get_sliderule_data(self) -> gpd.GeoDataFrame | pd.DataFrame | None:
+        """Acquire configured sources and return the combined photon dataframe."""
         sliderule.init("slideruleearth.io")
 
         atl03_photons = None
@@ -419,22 +440,62 @@ class DataRequest:
 
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
-            # Filter ATL03 photons by beam strength.
-            # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
-            # atl03_photons = self._filter_by_beam_strength(atl03_photons)
+            if atl03_photons is None or atl03_photons.empty:
+                msg = "ATL03 is required but SlideRule returned no data."
+                raise ValueError(msg)
+            self._require_fields("ATL03", atl03_photons, {"time_ns"})
 
             self.products.append("ATL03")
             self.sources.append("sliderule")
             self.metadata["ATL03"] = {
                 "request_type": "atl03",
+                "service": "slideruleearth.io",
                 "n_rows": len(atl03_photons),
                 "columns": list(atl03_photons.columns),
             }
+
+            self._require_fields(
+                "ATL09 background",
+                atl03_photons,
+                {"high_rate/backg_c"},
+            )
+            self.products.append("ATL09")
+            self.sources.append("sliderule")
+            self.metadata["ATL09"] = {
+                "request_type": "atl03x ancillary field",
+                "field": "high_rate/backg_c",
+                "n_rows": int(atl03_photons["high_rate/backg_c"].notna().sum()),
+            }
+
+            if self.get_gebco:
+                self._require_fields("GEBCO sample", atl03_photons, {"gebco.value"})
+                if atl03_photons["gebco.value"].notna().sum() == 0:
+                    msg = (
+                        "GEBCO was requested but SlideRule returned no usable samples."
+                    )
+                    raise ValueError(msg)
+                self.products.append("GEBCO")
+                self.sources.append("sliderule")
+                self.metadata["GEBCO"] = {
+                    "request_type": "atl03x sample",
+                    "asset": "gebco-s3",
+                    "n_rows": int(atl03_photons["gebco.value"].notna().sum()),
+                    "columns": [
+                        column
+                        for column in (
+                            "gebco.fileid",
+                            "gebco.time_ns",
+                            "gebco.value",
+                        )
+                        if column in atl03_photons.columns
+                    ],
+                }
 
         if self.need_atl24:
             atl24_photons = self.get_atl24_data()
 
             if atl24_photons is not None:
+                self._require_fields("ATL24", atl24_photons, {"time_ns"})
                 # Filter ATL24 data by beam strength.
                 # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
                 atl24_photons = self._filter_by_beam_strength(atl24_photons)
@@ -443,6 +504,7 @@ class DataRequest:
                 self.sources.append("sliderule")
                 self.metadata["ATL24"] = {
                     "request_type": "atl24",
+                    "service": "slideruleearth.io",
                     "n_rows": len(atl24_photons),
                     "columns": list(atl24_photons.columns),
                 }
@@ -466,7 +528,7 @@ class DataRequest:
         else:
             self.photons = None
 
-        return self
+        return self.photons
 
     # variables I appear to need for icephotons dataset
 

@@ -77,7 +77,7 @@ def test_data_request_defaults() -> None:
     assert req.beams is None
     assert req.need_atl03 is True
     assert req.need_atl24 is True
-    assert req.need_gebco is True
+    assert req.get_gebco is True
     assert req.need_shoreline is True
     assert req.need_jpl_temperature is False
     assert req.version_atl03 is None
@@ -164,7 +164,7 @@ def test_build_atl03_params_adds_gebco(basic_request: DataRequest) -> None:
     basic_request.time_range = None
     basic_request.beams = None
     basic_request.variables_atl03 = None
-    basic_request.need_gebco = True
+    basic_request.get_gebco = True
 
     params = basic_request.build_atl03_params()
 
@@ -176,7 +176,7 @@ def test_build_atl03_params_does_not_add_gebco(basic_request: DataRequest) -> No
     basic_request.time_range = None
     basic_request.beams = None
     basic_request.variables_atl03 = None
-    basic_request.need_gebco = False
+    basic_request.get_gebco = False
 
     params = basic_request.build_atl03_params()
 
@@ -303,23 +303,27 @@ def test_get_sliderule_data_filters_atl03_by_beam_strength(
         date_range=("2024-01-01", "2024-01-02"),
         need_atl03=True,
         need_atl24=False,
+        get_gebco=False,
         beams="weak",
     )
 
     raw_atl03 = pd.DataFrame(
         {
+            "time_ns": [1, 2, 3, 4, 5, 6],
             "spot": [1, 2, 3, 4, 5, 6],
             "height": [-1.0, -2.0, -3.0, -4.0, -5.0, -6.0],
+            "high_rate/backg_c": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
         }
     )
 
     monkeypatch.setattr(request, "get_atl03_data", lambda: raw_atl03)
 
-    result_request = request.get_sliderule_data()
+    result = request.get_sliderule_data()
 
-    assert list(result_request.photons["spot"]) == [2, 4, 6]
+    assert result is not None
+    assert list(result["spot"]) == [2, 4, 6]
     atl03_nrows = 3
-    assert result_request.metadata["ATL03"]["n_rows"] == atl03_nrows
+    assert request.metadata["ATL03"]["n_rows"] == atl03_nrows
 
 
 def test_filter_by_beam_strength_rejects_invalid_value() -> None:
@@ -391,6 +395,7 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     basic_request.date_range = ("2018-10-22", "2018-10-26")
     basic_request.need_atl03 = True
     basic_request.need_atl24 = True
+    basic_request.get_gebco = False
     basic_request.beams = "all"  # so filtering does not occur in merge test
 
     init_calls = []
@@ -421,26 +426,24 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     )
 
     result = basic_request.get_sliderule_data()
-
-    assert result is basic_request
+    assert result is not None
 
     assert init_calls == ["slideruleearth.io"]
     assert [call["api"] for call in run_calls] == ["atl03x", "atl24x"]
 
-    assert basic_request.photons is not None
-    assert list(basic_request.photons.index) == [1, 2, 3]
-    assert "x_atc" in basic_request.photons.columns
-    assert "height" in basic_request.photons.columns
-    assert "class_ph" in basic_request.photons.columns
-    assert "x_atc_atl24" in basic_request.photons.columns
-    assert "atl03_cnf" in basic_request.photons.columns
-    assert "photon_height" not in basic_request.photons.columns
-    assert "photon_conf" not in basic_request.photons.columns
-    assert "relative_AT_dist" not in basic_request.photons.columns
-    assert list(basic_request.photons["class_ph"].isna()) == [False, True, False]
+    assert list(result.index) == [1, 2, 3]
+    assert "x_atc" in result.columns
+    assert "height" in result.columns
+    assert "class_ph" in result.columns
+    assert "x_atc_atl24" in result.columns
+    assert "atl03_cnf" in result.columns
+    assert "photon_height" not in result.columns
+    assert "photon_conf" not in result.columns
+    assert "relative_AT_dist" not in result.columns
+    assert list(result["class_ph"].isna()) == [False, True, False]
 
-    assert basic_request.products == ["ATL03", "ATL24"]
-    assert basic_request.sources == ["sliderule", "sliderule"]
+    assert basic_request.products == ["ATL03", "ATL09", "ATL24"]
+    assert basic_request.sources == ["sliderule", "sliderule", "sliderule"]
 
     assert basic_request.metadata["ATL03"]["request_type"] == "atl03"
     atl03_nrows = 3
@@ -454,3 +457,52 @@ def test_get_sliderule_data_fetches_and_merges_atl03_and_atl24(
     assert set(basic_request.metadata["ATL24"]["columns"]) == set(
         fake_atl24_photons.columns
     )
+
+
+def test_get_atl24_data_returns_none_when_product_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    basic_request: DataRequest,
+) -> None:
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    monkeypatch.setattr(
+        "aok.core.datarequest.sliderule.run",
+        lambda api, params: pd.DataFrame(),
+    )
+
+    assert basic_request.get_atl24_data() is None
+
+
+def test_get_sliderule_data_returns_atl03_when_atl24_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    basic_request: DataRequest,
+    fake_atl03_photons: pd.DataFrame,
+) -> None:
+    basic_request.date_range = ("2018-10-22", "2018-10-26")
+    basic_request.get_gebco = False
+    monkeypatch.setattr(
+        "aok.core.datarequest.sliderule.init",
+        lambda url: None,
+    )
+    monkeypatch.setattr(basic_request, "get_atl03_data", lambda: fake_atl03_photons)
+    monkeypatch.setattr(basic_request, "get_atl24_data", lambda: None)
+
+    photons = basic_request.get_sliderule_data()
+
+    assert photons is fake_atl03_photons
+    assert basic_request.metadata["ATL24"]["status"] == "unavailable"
+
+
+def test_get_sliderule_data_fails_when_required_ancillary_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = DataRequest(
+        spatial=[-70, 42, -69, 43],
+        date_range=("2024-01-01", "2024-01-02"),
+        need_atl24=False,
+        get_gebco=False,
+    )
+    raw_atl03 = pd.DataFrame({"time_ns": [1], "height": [-1.0]})
+    monkeypatch.setattr(request, "get_atl03_data", lambda: raw_atl03)
+
+    with pytest.raises(ValueError, match="ATL09 background response"):
+        request.get_sliderule_data()
