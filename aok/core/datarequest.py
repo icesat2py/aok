@@ -443,6 +443,7 @@ class DataRequest:
             if atl03_photons is None or atl03_photons.empty:
                 msg = "ATL03 is required but SlideRule returned no data."
                 raise ValueError(msg)
+            atl03_photons = self._filter_by_beam_strength(atl03_photons)
             self._require_fields("ATL03", atl03_photons, {"time_ns"})
 
             self.products.append("ATL03")
