@@ -81,40 +81,85 @@ def assign_along_track_bins(photons: pd.DataFrame, xbin: float) -> pd.DataFrame:
     return photons
 
 
-def histogram_bin_photon_count(
-    photons: pd.DataFrame,
-    value_column: str,
-    bin_edges: Sequence[float],
-) -> pd.DataFrame:
-    """Build a histogram per track and along-track bin from photon values.
+def group_photons_into_along_track_bins(photons: pd.DataFrame) -> pd.DataFrame:
+    """Create one row per track and assigned along-track bin.
 
-    Histogram binning is computed here, not stored as per-photon bin indices.
-    ``value_column`` and ``bin_edges`` can vary between processing stages.
-    This adapts the count grouping in ``get_sea_surface_height_*`` from
-    ``kd_utils/sea_photons_analysis.py``.
+    Each row stores positional references to its photons instead of copying
+    photon attributes, allowing the same bins to be histogrammed repeatedly.
     """
-    histogram_columns = [
+    bin_columns = [
         *TRACK_COLUMNS,
         "along_track_bin_index",
         "along_track_bin_start_m",
     ]
+    rows: list[dict[str, object]] = []
+    grouped = photons.groupby(bin_columns, observed=True, sort=False)
+    for group_key, photon_row_indices in grouped.indices.items():
+        bin_key: tuple[object, ...]
+        if isinstance(group_key, tuple):
+            bin_key = cast(tuple[object, ...], group_key)
+        else:
+            bin_key = (group_key,)
+        rows.append(
+            {
+                **dict(zip(bin_columns, bin_key, strict=True)),
+                "photon_row_indices": photon_row_indices,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def histogram_bin_photon_count(
+    photons: pd.DataFrame,
+    along_track_bins: pd.DataFrame,
+    value_column: str,
+    bin_edges: Sequence[float],
+) -> pd.DataFrame:
+    """Build a histogram for each along-track bin from photon values.
+
+    Histogram binning is computed here, not stored as per-photon bin indices.
+    ``value_column`` and ``bin_edges`` can vary between calls, while the
+    along-track grouping is reused.
+    This adapts the count grouping in ``get_sea_surface_height_*`` from
+    ``kd_utils/sea_photons_analysis.py``.
+    """
+    bin_columns = [
+        *TRACK_COLUMNS,
+        "along_track_bin_index",
+        "along_track_bin_start_m",
+    ]
+    photon_values = pd.to_numeric(photons[value_column], errors="coerce").to_numpy(
+        dtype=np.float64
+    )
     bin_edges_array = np.asarray(bin_edges, dtype=np.float64)
     histogram_rows: list[dict[str, object]] = []
-    for histogram_key, group in photons.groupby(
-        histogram_columns,
-        observed=True,
-        sort=False,
-    ):
-        values = pd.to_numeric(group[value_column], errors="coerce").dropna()
-        counts, edges = np.histogram(
-            np.asarray(values, dtype=np.float64),
-            bins=bin_edges_array,
+    for row in along_track_bins.itertuples(index=False, name=None):
+        bin_key = row[: len(bin_columns)]
+        photon_row_indices = np.asarray(row[len(bin_columns)], dtype=np.intp)
+        values = photon_values[photon_row_indices]
+        values = values[np.isfinite(values)]
+        bin_indices = pd.Series(
+            pd.cut(
+                pd.Series(values),
+                bins=bin_edges_array.tolist(),
+                labels=False,
+                right=False,
+            )
+        )
+        bin_indices = bin_indices.mask(
+            values == bin_edges_array[-1],
+            len(bin_edges_array) - 2,
+        )
+        counts = (
+            bin_indices.value_counts(sort=False)
+            .reindex(range(len(bin_edges_array) - 1), fill_value=0)
+            .to_numpy(dtype=np.int64)
         )
         histogram_rows.append(
             {
-                **dict(zip(histogram_columns, histogram_key, strict=True)),
+                **dict(zip(bin_columns, bin_key, strict=True)),
                 "histogram_value_column": value_column,
-                "histogram_bin_edges": edges,
+                "histogram_bin_edges": bin_edges_array,
                 "photon_counts_by_bin": counts,
             }
         )
