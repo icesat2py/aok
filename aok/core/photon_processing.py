@@ -54,6 +54,7 @@ def normalize_gebco_samples(
     )
     return photons
 
+
 def filter_land_photons(
     photons: pd.DataFrame,
     land_mask_column: str = "gebco.value",
