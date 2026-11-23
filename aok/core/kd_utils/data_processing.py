@@ -107,10 +107,10 @@ def read_granule(FILENAME, ATTRIBUTES=False, **kwargs):
         if ATTRIBUTES:
             # Getting attributes of IS2_atl03_mds beam variables
             IS2_atl03_attrs[gtx] = {}
-            IS2_atl03_attrs[gtx]["heights"] = {}
-            IS2_atl03_attrs[gtx]["geolocation"] = {}
-            IS2_atl03_attrs[gtx]["bckgrd_atlas"] = {}
-            IS2_atl03_attrs[gtx]["geophys_corr"] = {}
+            IS2_atl03_attrs[gtx]["heights"] = {}  # sliderule atl03_ph_fields
+            IS2_atl03_attrs[gtx]["geolocation"] = {}  # slide rule atl03_geo_fields
+            IS2_atl03_attrs[gtx]["bckgrd_atlas"] = {}  # sliderule atl03_bckgrd_fields
+            IS2_atl03_attrs[gtx]["geophys_corr"] = {}  # sliderule atl03_cor_fields
 
             # Global Group Attributes
             for att_name, att_val in fileID[gtx].attrs.items():
@@ -465,114 +465,6 @@ def interpolate_by_time(source_time, source_values, target_time):
     )
 
 
-def apply_optional_solar_background_filter(
-    sea_photon_dataset,
-    enabled=False,
-    day_threshold=6.0,
-    median_window_deg=10.0,
-    noise_multiplier=1.5,
-    min_signal_conf=2,
-):
-    """
-    Optionally filter photons under strong daytime solar background conditions.
-
-    Uses a degree-based rolling median of background_rate over solar_elevation
-    to compute the expected background at each elevation. Photons whose actual
-    background_rate exceeds expected * noise_multiplier are flagged noisy.
-    Noisy photons are removed unless their signal confidence >= min_signal_conf.
-
-    Flowchart step: 5 — Compute solar background from atmospheric signal (using
-    selected x and z bin length scales) and subtract from subsurface photon
-    histogram data.
-    """
-    if not enabled:
-        return sea_photon_dataset
-
-    required_cols = {"solar_elevation", "background_rate", "photon_conf"}
-    if not required_cols.issubset(set(sea_photon_dataset.columns)):
-        logger.warning(
-            "Solar background filter skipped because required columns are missing."
-        )
-        return sea_photon_dataset
-
-    filtered_dataset = sea_photon_dataset.copy()
-    daytime_mask = filtered_dataset["solar_elevation"] >= day_threshold
-
-    # Select valid daytime photons for rolling median computation
-    daytime = filtered_dataset.loc[daytime_mask].copy()
-    valid = np.isfinite(daytime["background_rate"]) & np.isfinite(
-        daytime["solar_elevation"]
-    )
-    daytime = daytime.loc[valid]
-
-    if len(daytime) < 10:
-        logger.info(
-            "Solar background filter enabled, but fewer than 10 valid daytime "
-            "photons were found. Skipping filter."
-        )
-        return filtered_dataset
-
-    # Clamp solar elevations to physical range [DAY_THRESHOLD, 90] to avoid
-    # HDF5 fill values (e.g. 3.4e+38) blowing up the bin array.
-    daytime = daytime.copy()
-    daytime["solar_elevation"] = daytime["solar_elevation"].clip(
-        lower=day_threshold, upper=90.0
-    )
-
-    # Vectorized degree-based rolling median:
-    # Bin elevations into fine steps, compute one median per bin using
-    # np.searchsorted on the sorted array, then map back to photons.
-    daytime = daytime.sort_values("solar_elevation")
-    elevations = daytime["solar_elevation"].values
-    bg_rates = daytime["background_rate"].values
-    half_window = median_window_deg / 2.0
-
-    bin_step = 0.1  # degrees — fine enough for smooth curve
-    bin_centers = np.arange(elevations[0], elevations[-1] + bin_step, bin_step)
-    bin_medians = np.empty(len(bin_centers))
-    for i in range(len(bin_centers)):
-        lo = np.searchsorted(elevations, bin_centers[i] - half_window, side="left")
-        hi = np.searchsorted(elevations, bin_centers[i] + half_window, side="right")
-        if lo < hi:
-            bin_medians[i] = np.median(bg_rates[lo:hi])
-        else:
-            bin_medians[i] = np.nan
-
-    # Map bin medians back to each photon via nearest-bin lookup (vectorized)
-    bin_indices = np.searchsorted(bin_centers, elevations, side="right") - 1
-    bin_indices = np.clip(bin_indices, 0, len(bin_centers) - 1)
-    expected_bg = bin_medians[bin_indices]
-
-    # Map expected background onto the full DataFrame. Non-daytime and
-    # non-finite daytime rows stay NaN, so they are never flagged noisy.
-    filtered_dataset["expected_bg"] = np.nan
-    filtered_dataset.loc[daytime.index, "expected_bg"] = expected_bg
-
-    # Flag noisy daytime photons
-    noisy_daytime_mask = daytime_mask & (
-        filtered_dataset["background_rate"]
-        >= filtered_dataset["expected_bg"] * noise_multiplier
-    )
-    keep_mask = (~noisy_daytime_mask) | (
-        filtered_dataset["photon_conf"] >= min_signal_conf
-    )
-
-    # Clean up temporary column
-    filtered_dataset.drop(columns=["expected_bg"], inplace=True, errors="ignore")
-
-    before_count = len(filtered_dataset)
-    filtered_dataset = filtered_dataset.loc[keep_mask].copy()
-    after_count = len(filtered_dataset)
-    logger.info(
-        "Solar background filter (multiplier=%.1f) removed %s photons (from %s to %s).",
-        noise_multiplier,
-        before_count - after_count,
-        before_count,
-        after_count,
-    )
-    return filtered_dataset
-
-
 def apply_optional_ir_ap_filter(
     sea_photon_dataset, enabled=False, quality_max=0, min_signal_conf=0
 ):
@@ -629,7 +521,27 @@ def apply_optional_ir_ap_filter(
     return filtered_dataset
 
 
-def Extract_sea_photons(IS2_atl03_mds, target_strong_beams, shoreline_data_path):
+def preserve_time_ns_as_column(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure time_ns is a regular column and the dataframe has a unique row index.
+    """
+    df = df.copy()
+
+    if df.index.name == "time_ns":
+        df = df.reset_index()
+
+    # If the index was unnamed but still non-unique, replace it with a clean row index.
+    if not df.index.is_unique:
+        df = df.reset_index(drop=True)
+
+    return df
+
+
+def Extract_sea_photons(
+    IS2_atl03_mds,  # dictionary from .read_granule()
+    target_strong_beams,  # dictionary? - seems like gtx attributes from selected beams; not 100% sure. generated by main.get_target_beams()
+    shoreline_data_path,  # shape to
+):
     Segment_ID = {}
     Segment_Index_begin = {}
     Segment_PE_count = {}
@@ -640,7 +552,7 @@ def Extract_sea_photons(IS2_atl03_mds, target_strong_beams, shoreline_data_path)
     Segment_Lat = {}
     Segment_Elev = {}
     Segment_Time = {}
-    Segment_ref_elev = {}
+    Segment_ref_elev = {}  # not used again?
     Segment_ref_azimuth = {}
     background_rate = {}
     background_counts = {}
@@ -679,6 +591,7 @@ def Extract_sea_photons(IS2_atl03_mds, target_strong_beams, shoreline_data_path)
         quality_ph = IS2_val["heights"]["quality_ph"]
 
         # Optional variables for solar background sensitivity testing
+        # interpolate from segment on dataframe
         photon_solar_elevation = np.full_like(photon_delta_time, np.nan, dtype=float)
         photon_background_rate = np.full_like(photon_delta_time, np.nan, dtype=float)
         if "solar_elevation" in IS2_val["geolocation"]:
@@ -706,7 +619,9 @@ def Extract_sea_photons(IS2_atl03_mds, target_strong_beams, shoreline_data_path)
             x_atc[idx : idx + cnt] += Equator_Segment_Distance[gtx][seg_index]
 
         # Calculate relative distances
-        relative_AT_dist = (x_atc - x_atc[0]) / 1000
+        relative_AT_dist = (
+            x_atc - x_atc[0]
+        ) / 1000  # why divided by 1000? conversion of units?
         relative_seg_dist = (
             Equator_Segment_Distance[gtx] - Equator_Segment_Distance[gtx][0]
         ) / 1000

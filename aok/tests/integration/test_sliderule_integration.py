@@ -51,30 +51,29 @@ def test_sliderule_real_atl03_request_returns_photons() -> None:
         date_range=("2022-04-23", "2022-04-23"),
         need_atl03=True,
         need_atl24=False,
-        need_gebco=False,
+        get_gebco=False,
         need_shoreline=False,
     )
 
-    result = request.get_sliderule_data()
+    photons = request.get_sliderule_data()
 
-    assert result is request
-    assert request.photons is not None
-    assert isinstance(request.photons, pd.DataFrame)
-    assert len(request.photons) > 0
+    assert photons is not None
+    assert isinstance(photons, pd.DataFrame)
+    assert len(photons) > 0
 
-    assert request.products == ["ATL03"]
-    assert request.sources == ["sliderule"]
+    assert request.products == ["ATL03", "ATL09"]
+    assert request.sources == ["sliderule", "sliderule"]
 
     assert "ATL03" in request.metadata
     assert request.metadata["ATL03"]["request_type"] == "atl03"
-    assert request.metadata["ATL03"]["n_rows"] == len(request.photons)
+    assert request.metadata["ATL03"]["n_rows"] == len(photons)
 
-    assert dataframe_has_field(request.photons, "time_ns"), (
+    assert dataframe_has_field(photons, "time_ns"), (
         "Expected time_ns to exist either as a column or as the dataframe index."
     )
 
     missing_fields = missing_required_fields(
-        request.photons,
+        photons,
         REQUIRED_ATL03_COLUMNS,
     )
 

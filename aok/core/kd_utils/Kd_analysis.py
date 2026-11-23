@@ -1068,7 +1068,7 @@ def CalculateKdFromFilteredSubsurfacePhoton(
     # Wave-adaptive fit: skip shallow bins contaminated by wave smearing/bubbles.
     # zdepth=0 in the histogram corresponds to the adaptive surface detection
     # threshold: max(3*sigma, 1.0 m) below the Gaussian surface peak
-    # (set by get_sea_surface_height_adaptive).  The wave-adaptive trim adds
+    # (set by aok/core/surface_processing.py).  The wave-adaptive trim adds
     # an additional margin of (k - 3)*sigma beyond the 3-sigma cutoff to
     # cover bubble injection beneath wave troughs and compensate for sigma
     # underestimation from the truncated ±1 m Gaussian fit window.

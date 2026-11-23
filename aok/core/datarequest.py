@@ -51,7 +51,7 @@ class DataRequest:
         Whether ATL03 photon data should be requested.
     need_atl24
         Whether ATL24 bathymetry-classified photon data should be requested.
-    need_gebco
+    get_gebco
         Whether GEBCO bathymetry samples should be requested with ATL03.
     need_shoreline
         Whether shoreline data should be used for spatial filtering. This behavior
@@ -95,7 +95,7 @@ class DataRequest:
 
     need_atl03: bool = True
     need_atl24: bool = True
-    need_gebco: bool = True
+    get_gebco: bool = True
     need_shoreline: bool = True
     need_jpl_temperature: bool = False
 
@@ -112,6 +112,11 @@ class DataRequest:
     metadata: dict[str, Any] = field(default_factory=dict[str, Any])
     sources: list[str] = field(default_factory=list[str])
     products: list[str] = field(default_factory=list[str])
+
+    # TODO manage spatial input types (probably in config.py?)
+    # to pass something predictable in to DataRequest (possibly use icepyx for this?)
+    def _sliderule_spatial_format(self) -> list:
+        return sliderule.toregion(source=self.spatial)
 
     def _sliderule_time_range(self) -> tuple[str, str]:
         """Build SlideRule time range parameters
@@ -159,7 +164,7 @@ class DataRequest:
         """
 
         params: dict[str, Any] = {
-            "poly": self.spatial,
+            "poly": self._sliderule_spatial_format()["poly"],
             "t0": t0,  # from time range convert function
             "t1": t1,  # from time range convert function
             "srt": [0, 1, 2, 3, 4],  # -1 for atl24 data; surface type for atl03
@@ -232,7 +237,7 @@ class DataRequest:
         # Add optional call to gebco;
         # returns three columns gebco.fileid, gebco.time_ns
         # and gebco.value
-        if self.need_gebco:
+        if self.get_gebco:
             params["samples"] = {"gebco": {"asset": "gebco-s3"}}
 
         if self.beams is not None:
@@ -258,7 +263,7 @@ class DataRequest:
 
         return params
 
-    def get_atl03_data(self) -> pd.DataFrame:
+    def get_atl03_data(self) -> pd.DataFrame | None:
         params = self.build_atl03_params()
         return sliderule.run("atl03x", params)
 
@@ -293,6 +298,20 @@ class DataRequest:
 
         return atl24
 
+    # evaluate if this is needed, given I don't think SR would return data without it
+    @staticmethod
+    def _require_fields(
+        product: str,
+        frame: pd.DataFrame,
+        fields: set[str],
+    ) -> None:
+        missing = fields.difference(frame.columns)
+        if "time_ns" in missing and frame.index.name == "time_ns":
+            missing.remove("time_ns")
+        if missing:
+            msg = f"{product} response is missing required fields: {sorted(missing)}"
+            raise ValueError(msg)
+
     def _merge_photons(
         self,
         atl03_photons: pd.DataFrame,
@@ -322,6 +341,17 @@ class DataRequest:
             msg = (
                 "Cannot merge photons: ATL24 photons are missing 'time_ns' "
                 "as both a column and an index."
+            )
+            raise ValueError(msg)
+
+        # Confirm whether this is needed; time uniqueness has been an ongoing issue.
+        atl24_time = (
+            atl24_photons.index if atl24_has_time_ns_index else atl24_photons["time_ns"]
+        )
+        if atl24_time.has_duplicates:
+            msg = (
+                "Cannot merge ATL24: 'time_ns' is not unique. "
+                "Confirm the product matching key before merging."
             )
             raise ValueError(msg)
 
@@ -369,106 +399,6 @@ class DataRequest:
 
         return merged
 
-    def rename_atl03_columns(self, atl03_photons: pd.DataFrame) -> pd.DataFrame:
-        """
-        Rename ATL03 columns from SlideRule names to the names expected by
-        the existing Kd-processing code.
-
-        Rules
-        -----
-        1. If the SlideRule name and AOK pipeline name are identical, do nothing.
-           Example: "latitude" -> "latitude"
-
-        2. If the SlideRule name and AOK pipeline name are different, rename the
-           SlideRule column to the AOK pipeline name.
-           Example: "height" -> "photon_height"
-
-        3. If the AOK pipeline name already exists in the dataframe, first preserve
-           the existing column by renaming it with a "_sr" suffix, then rename the
-           SlideRule column to the AOK pipeline name.
-           Example:
-               existing "background_rate" -> "background_rate_sr"
-               "bckgrd_rate" -> "background_rate"
-
-        Columns not listed in ATL03_COLUMN_RENAMES are preserved unchanged.
-        """
-        ATL03_COLUMN_RENAMES = {
-            # SlideRule name: AOK pipeline expected name
-            "latitude": "latitude",
-            "longitude": "longitude",
-            "spot": "beam_id",
-            "height": "photon_height",
-            "quality_ph": "quality_ph",
-            "atl03_cnf": "photon_conf",
-            "ref_elevation": "ref_elevation",
-            "ref_azimuth": "ref_azimuth",
-            # Solar background filter inputs
-            "solar_elevation": "solar_elevation",
-            "bckgrd_rate": "background_rate",
-            # Be cautious: this may not be equivalent to the older relative_AT_dist
-            # calculation, which adjusted x_atc by segment distance and converted to km.
-            "x_atc": "relative_AT_dist",
-        }
-
-        photons = atl03_photons.copy()
-
-        for sliderule_name, pipeline_name in ATL03_COLUMN_RENAMES.items():
-            # Column is not present, so there is nothing to rename.
-            if sliderule_name not in photons.columns:
-                continue
-
-            # Names are already identical, so do not rename.
-            if sliderule_name == pipeline_name:
-                continue
-
-            # If the target pipeline name already exists, preserve that existing
-            # column before renaming the SlideRule column into its place.
-            if pipeline_name in photons.columns:
-                sr_preserved_name = f"{pipeline_name}_sr"
-
-                # Avoid overwriting an existing *_sr column.
-                suffix_number = 2
-                while sr_preserved_name in photons.columns:
-                    sr_preserved_name = f"{pipeline_name}_sr{suffix_number}"
-                    suffix_number += 1
-
-                photons = photons.rename(columns={pipeline_name: sr_preserved_name})
-
-            # Now rename the SlideRule column to the AOK pipeline name.
-            photons = photons.rename(columns={sliderule_name: pipeline_name})
-
-        duplicate_columns = (
-            photons.columns[photons.columns.duplicated()].unique().tolist()
-        )
-        if duplicate_columns:
-            msg = (
-                f"ATL03 column renaming produced duplicate columns: {duplicate_columns}"
-            )
-            raise ValueError(msg)
-
-        return photons
-
-    def rename_atl24_columns(self, atl24_photons: pd.DataFrame) -> pd.DataFrame:
-        """
-        Rename ATL24 columns from SlideRule names to the names expected by
-        the existing AOK pipeline code.
-
-        Columns not present in the dataframe are ignored. Columns not listed in
-        ATL24_COLUMN_RENAMES are preserved unchanged.
-        """
-        ATL24_COLUMN_RENAMES = {
-            # SlideRule ATL24 name: AOK pipeline expected name
-            # TBD: Fill in based on actual ATL24 output columns.
-        }
-
-        rename_map = {
-            sliderule_name: pipeline_name
-            for sliderule_name, pipeline_name in ATL24_COLUMN_RENAMES.items()
-            if sliderule_name in atl24_photons.columns
-        }
-
-        return atl24_photons.rename(columns=rename_map).copy()
-
     def _filter_by_beam_strength(self, photon_df: pd.DataFrame) -> pd.DataFrame:
         """
         Filter photon dataframe by ICESat-2 beam strength.
@@ -497,12 +427,8 @@ class DataRequest:
 
         return pd.DataFrame(photon_df.loc[photon_df["spot"].isin(spots), :])
 
-    def get_sliderule_data(self) -> "DataRequest":
-        """
-        Use sliderule to get data from all sources and return
-        as a list of acquisition results
-
-        """
+    def get_sliderule_data(self) -> gpd.GeoDataFrame | pd.DataFrame | None:
+        """Acquire configured sources and return the combined photon dataframe."""
         sliderule.init("slideruleearth.io")
 
         atl03_photons = None
@@ -514,33 +440,72 @@ class DataRequest:
 
         if self.need_atl03:
             atl03_photons = self.get_atl03_data()
-            # Filter ATL03 photons by beam strength.
-            # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
+            if atl03_photons is None or atl03_photons.empty:
+                msg = "ATL03 is required but SlideRule returned no data."
+                raise ValueError(msg)
             atl03_photons = self._filter_by_beam_strength(atl03_photons)
-            atl03_photons = self.rename_atl03_columns(atl03_photons)
+            self._require_fields("ATL03", atl03_photons, {"time_ns"})
 
             self.products.append("ATL03")
             self.sources.append("sliderule")
             self.metadata["ATL03"] = {
                 "request_type": "atl03",
+                "service": "slideruleearth.io",
                 "n_rows": len(atl03_photons),
                 "columns": list(atl03_photons.columns),
             }
+
+            self._require_fields(
+                "ATL09 background",
+                atl03_photons,
+                {"high_rate/backg_c"},
+            )
+            self.products.append("ATL09")
+            self.sources.append("sliderule")
+            self.metadata["ATL09"] = {
+                "request_type": "atl03x ancillary field",
+                "field": "high_rate/backg_c",
+                "n_rows": int(atl03_photons["high_rate/backg_c"].notna().sum()),
+            }
+
+            if self.get_gebco:
+                self._require_fields("GEBCO sample", atl03_photons, {"gebco.value"})
+                if atl03_photons["gebco.value"].notna().sum() == 0:
+                    msg = (
+                        "GEBCO was requested but SlideRule returned no usable samples."
+                    )
+                    raise ValueError(msg)
+                self.products.append("GEBCO")
+                self.sources.append("sliderule")
+                self.metadata["GEBCO"] = {
+                    "request_type": "atl03x sample",
+                    "asset": "gebco-s3",
+                    "n_rows": int(atl03_photons["gebco.value"].notna().sum()),
+                    "columns": [
+                        column
+                        for column in (
+                            "gebco.fileid",
+                            "gebco.time_ns",
+                            "gebco.value",
+                        )
+                        if column in atl03_photons.columns
+                    ],
+                }
 
         if self.need_atl24:
             atl24_photons = self.get_atl24_data()
 
             if atl24_photons is not None:
+                self._require_fields("ATL24", atl24_photons, {"time_ns"})
                 # Filter ATL24 data by beam strength.
                 # Default behavior: None -> "strong" -> keep spots 1, 3, 5.
                 atl24_photons = self._filter_by_beam_strength(atl24_photons)
-                # tbd uncomment when rename atl24 columns works
-                # atl24_photons = self.rename_atl24_columns(atl24_photons)
 
                 self.products.append("ATL24")
                 self.sources.append("sliderule")
                 self.metadata["ATL24"] = {
                     "request_type": "atl24",
+                    "service": "slideruleearth.io",
                     "n_rows": len(atl24_photons),
                     "columns": list(atl24_photons.columns),
                 }
@@ -564,7 +529,7 @@ class DataRequest:
         else:
             self.photons = None
 
-        return self
+        return self.photons
 
     # variables I appear to need for icephotons dataset
 
