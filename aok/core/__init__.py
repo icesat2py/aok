@@ -1,3 +1,3 @@
-from aok.core import datarequest, main
+from aok.core import calculate_kdph, datarequest, main
 
-__all__ = ["datarequest", "main"]
+__all__ = ["calculate_kdph", "datarequest", "main"]

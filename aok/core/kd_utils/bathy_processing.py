@@ -10,115 +10,6 @@ from scipy.spatial import cKDTree
 from shapely.geometry import box
 
 
-def apply_optional_histogram_quality_filter(
-    binned_dataset_sea_surface,
-    subsurface_photon_dataset,
-    sea_surface_height,
-    min_ratio=0.05,
-    depth_min=6.0,
-    depth_max=7.0,
-    reference_depth_min=0.0,
-    reference_depth_max=1.0,
-):
-    """
-    Optional histogram quality check: keep along-track bins only if enough
-    signal remains at the target depth band relative to near-surface signal.
-
-    Flowchart step: 6 — Review histograms for quality: if <5% of signal remains
-    at an uncorrected water depth of 6-7 m below the surface, quality-flag this
-    along-track bin as low confidence and exclude it from further analyses
-    (Possible discard).
-
-    The decay ratio is computed as:
-        photon_count_in_depth_band / photon_count_in_reference_band
-
-    This measures how much signal has decayed at depth compared to near the
-    surface, consistent with Beer's Law attenuation.
-
-    Parameters
-    ----------
-    binned_dataset_sea_surface : pd.DataFrame
-        Full binned photon dataset with 'lat_bins' and 'photon_height'.
-    subsurface_photon_dataset : pd.DataFrame
-        Subsurface photon dataset to filter.
-    sea_surface_height : list
-        Sea surface height per along-track bin.
-    min_ratio : float
-        Minimum decay ratio to keep a bin (default 0.05 = 5%).
-    depth_min : float
-        Minimum depth of the quality-check band (default 6.0 m).
-    depth_max : float
-        Maximum depth of the quality-check band (default 7.0 m).
-    reference_depth_min : float
-        Minimum depth of the near-surface reference band (default 0.0 m).
-    reference_depth_max : float
-        Maximum depth of the near-surface reference band (default 1.0 m).
-    """
-    if subsurface_photon_dataset.empty:
-        return subsurface_photon_dataset
-
-    grouped = binned_dataset_sea_surface.groupby(["lat_bins"], observed=False)
-    lat_bin_keys = list(grouped.groups.keys())
-    if len(lat_bin_keys) != len(sea_surface_height):
-        return subsurface_photon_dataset
-
-    quality_df = (
-        pd.DataFrame(
-            {"lat_bins": lat_bin_keys, "sea_surface_height": sea_surface_height}
-        )
-        .dropna(subset=["sea_surface_height"])
-        .copy()
-    )
-    if quality_df.empty:
-        return subsurface_photon_dataset.iloc[0:0].copy()
-
-    ratios = []
-    for _, row in quality_df.iterrows():
-        lat_bin = row["lat_bins"]
-        surface = row["sea_surface_height"]
-        bin_data = binned_dataset_sea_surface[
-            binned_dataset_sea_surface["lat_bins"] == lat_bin
-        ]
-        if bin_data.empty:
-            ratios.append(0.0)
-            continue
-
-        depth = surface - bin_data["photon_height"]
-        underwater_mask = depth > 0
-
-        # Reference band: near-surface photon count (incoming signal)
-        ref_mask = (
-            underwater_mask
-            & (depth >= reference_depth_min)
-            & (depth <= reference_depth_max)
-        )
-        ref_count = float(ref_mask.sum())
-        if ref_count == 0:
-            ratios.append(0.0)
-            continue
-
-        # Target band: photon count at the check depth
-        band_mask = underwater_mask & (depth >= depth_min) & (depth <= depth_max)
-        band_count = float(band_mask.sum())
-
-        # Normalize by band width so bands of different sizes are comparable
-        ref_width = max(reference_depth_max - reference_depth_min, 0.01)
-        band_width = max(depth_max - depth_min, 0.01)
-        decay_ratio = (band_count / band_width) / (ref_count / ref_width)
-
-        ratios.append(decay_ratio)
-
-    quality_df["hist_quality_ratio"] = ratios
-    valid_bins = set(
-        quality_df.loc[
-            quality_df["hist_quality_ratio"] >= min_ratio, "lat_bins"
-        ].tolist()
-    )
-    return subsurface_photon_dataset[
-        subsurface_photon_dataset["lat_bins"].isin(valid_bins)
-    ].copy()
-
-
 # Ideas for retooling:#
 def apply_sea_surface_flattening(
     subsurface_photon_dataset,
@@ -317,7 +208,7 @@ def query_gebco_seafloor_elevation(sea_photon_dataset, gebco_paths):
     Query GEBCO raster tiles and attach a 'seafloor_elevation' column to the
     photon dataset. Does not remove any rows.
 
-    Flowchart step: 12 — Retrieve GEBCO data (or other regional raster
+    Retrieve GEBCO data (or other regional raster
     bathymetry data) for the region when ATL24 is unavailable or returns no
     matching points.
 
@@ -345,54 +236,6 @@ def query_gebco_seafloor_elevation(sea_photon_dataset, gebco_paths):
     return dataset
 
 
-def remove_photons_below_seafloor(sea_photon_dataset):
-    """
-    Remove photons whose height is at or below the seabed elevation.
-
-    Flowchart step: 13 — Remove data below seabed (seabed defined by ATL24 or
-    GEBCO).
-
-    Parameters
-    ----------
-    sea_photon_dataset : pd.DataFrame
-        Must contain 'photon_height' and 'seafloor_elevation' columns.
-
-    Returns
-    -------
-    pd.DataFrame
-        Only rows where photon_height > seafloor_elevation.
-    """
-    return sea_photon_dataset[
-        sea_photon_dataset["photon_height"] > sea_photon_dataset["seafloor_elevation"]
-    ].copy()
-
-
-def discard_shallow_seabed_bins(sea_photon_dataset, min_depth_m):
-    """
-    Discard all along-track bins where the seabed is shallower than the minimum
-    depth threshold. Kd is not calculated for these bins; they are labelled as
-    low confidence by exclusion.
-
-    Flowchart step: 14 — Discard all photon data in horizontal bins where the
-    seabed is <5 m deep; Kd is not calculated for these bins — label discarded
-    bins as low confidence.
-
-    Parameters
-    ----------
-    sea_photon_dataset : pd.DataFrame
-        Must contain a 'depth' column (= -seafloor_elevation, positive downward).
-    min_depth_m : float
-        Minimum seabed depth to retain (e.g., 5.0 m). Bins shallower than this
-        are discarded.
-
-    Returns
-    -------
-    pd.DataFrame
-        Only rows where depth >= min_depth_m.
-    """
-    return sea_photon_dataset[sea_photon_dataset["depth"] >= min_depth_m].copy()
-
-
 # 4. The main process function that ties everything together
 def process_seafloor_data(
     sea_photon_dataset, gebco_paths, Ignore_Subsurface_Height_Thres
@@ -400,10 +243,10 @@ def process_seafloor_data(
     """
     Query GEBCO bathymetry then apply seabed and shallow-water filters.
 
-    Delegates to three single-step helpers:
-      query_gebco_seafloor_elevation  → step 12
-      remove_photons_below_seafloor   → step 13
-      discard_shallow_seabed_bins     → step 14
+    Delegates to three bathymetry helpers:
+      query_gebco_seafloor_elevation
+      remove_photons_below_seafloor
+      discard_shallow_seabed_bins
 
     Parameters:
         gebco_paths (list): List of path to GEBCO raster files.
@@ -414,12 +257,10 @@ def process_seafloor_data(
         filtered_sea_photon_dataset (pandas.DataFrame): Filtered dataset
             containing points above the seafloor in water deeper than threshold.
     """
-    dataset = query_gebco_seafloor_elevation(sea_photon_dataset, gebco_paths)  # step 12
+    dataset = query_gebco_seafloor_elevation(sea_photon_dataset, gebco_paths)
     dataset["depth"] = -dataset["seafloor_elevation"]
-    dataset = remove_photons_below_seafloor(dataset)  # step 13
-    return discard_shallow_seabed_bins(
-        dataset, abs(Ignore_Subsurface_Height_Thres)
-    )  # step 14
+    dataset = dataset[dataset["photon_height"] > dataset["seafloor_elevation"]].copy()
+    return dataset[dataset["depth"] >= abs(Ignore_Subsurface_Height_Thres)].copy()
 
 
 def load_atl24_points(atl24_file_path):
@@ -427,7 +268,7 @@ def load_atl24_points(atl24_file_path):
     Load ATL24 point dataset and normalize to columns: longitude, latitude,
     seafloor_elevation_atl24.
 
-    Flowchart step: 12 — Query ATL24 data for bathymetry match; if no match,
+    Query ATL24 data for bathymetry match; if no match,
     retrieve GEBCO data (or other regional raster bathymetry data) for region.
     """
     if (not atl24_file_path) or (not os.path.exists(atl24_file_path)):
@@ -586,10 +427,10 @@ def process_seafloor_data_atl24(
     matched_dataset = matched_dataset.dropna(subset=["seafloor_elevation"]).copy()
     matched_dataset["depth"] = -matched_dataset["seafloor_elevation"]
 
-    above_floor = remove_photons_below_seafloor(matched_dataset)  # step 13
+    above_floor = remove_photons_below_seafloor(matched_dataset)
     filtered_dataset = discard_shallow_seabed_bins(
         above_floor, abs(Ignore_Subsurface_Height_Thres)
-    )  # step 14
+    )
     return filtered_dataset, matched_count
 
 

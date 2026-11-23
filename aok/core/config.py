@@ -44,6 +44,21 @@ class KdConfig(BaseModel):
     refraction_wavelength_nm: float = Field(default=532.0, gt=0.0)
     post_refraction_refit_enabled: bool = Field(default=False)
     surface_wave_trim_min_m: float = Field(default=1.0, gt=0.0)
+    histogram_quality_enabled: bool = Field(default=False)
+    histogram_quality_min_ratio: float = Field(default=0.05, ge=0.0)
+    histogram_quality_depth_min_m: float = Field(default=6.0, ge=0.0)
+    histogram_quality_depth_max_m: float = Field(default=7.0, gt=0.0)
+    histogram_quality_reference_min_m: float = Field(default=0.0, ge=0.0)
+    histogram_quality_reference_max_m: float = Field(default=1.0, gt=0.0)
+    minimum_photons_per_decay_bin: int = Field(default=2, ge=1)
+    minimum_column_photons: int = Field(default=30, ge=1)
+    minimum_breakpoint_depth_m: float = Field(default=5.0, ge=0.0)
+    minimum_decay_zone_bins: int = Field(default=8, ge=1)
+    minimum_decay_range_m: float = Field(default=5.0, ge=0.0)
+    minimum_seabed_depth_m: float = Field(default=5.0, ge=0.0)
+    atl24_match_tolerance_m: float = Field(default=100.0, gt=0.0)
+    minimum_kd: float = Field(default=0.01, gt=0.0)
+    maximum_kd: float = Field(default=2.0, gt=0.0)
     spatial: list[float] = Field(
         default_factory=lambda: [-150.622053, 61.045382, -150.361757, 61.171146]
     )
@@ -101,6 +116,18 @@ def check_config_values(config: KdConfig) -> None:
 
     if config.solar_bg_min_signal_conf < 0:
         raise ValueError(SOLAR_CONFIDENCE_ERROR)
+
+    if config.histogram_quality_depth_max_m <= config.histogram_quality_depth_min_m:
+        raise ValueError("histogram_quality_depth_max_m must exceed depth_min_m")
+    if (
+        config.histogram_quality_reference_max_m
+        <= config.histogram_quality_reference_min_m
+    ):
+        raise ValueError(
+            "histogram_quality_reference_max_m must exceed reference_min_m"
+        )
+    if config.maximum_kd <= config.minimum_kd:
+        raise ValueError("maximum_kd must exceed minimum_kd")
 
 
 def get_args(config_path: str | Path | None = None) -> KdConfig:

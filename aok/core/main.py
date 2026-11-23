@@ -5,7 +5,9 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .calculate_kdph import CalculateKdph
 from .config import KdConfig, get_args
+from .datarequest import DataRequest
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,13 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class AOKPipeline:
-    """Minimal pipeline object that keeps the config-driven API stable.
-
-    The project is in transition from the older local file workflow to the
-    modular SlideRule-and-GeoDataFrame pipeline described in the staging plan.
-    This class preserves the public entrypoint pattern used by the tests while
-    keeping the implementation rooted in the validated config contract.
-    """
+    """Config-driven Kd pipeline object for notebooks and CLI use."""
 
     def __init__(self, args: KdConfig | Any):
         self.workspace_path = getattr(args, "workspace_path", None)
@@ -41,44 +37,49 @@ class AOKPipeline:
         output_path.mkdir(parents=True, exist_ok=True)
 
         self.timestamp = self._infer_timestamp()
+        self.kdph = CalculateKdph(self.args)
 
     def _infer_timestamp(self) -> str:
         if hasattr(self.args, "atl03_file") and self.args.atl03_file:
             match = re.search(r"ATL03_(\d{14})", str(self.args.atl03_file))
             if match:
                 return match.group(1)
-
         return "unknown"
 
     def run(self):
-        """Run the config-driven pipeline.
-
-        This is intentionally a compatibility layer for the current project state:
-        it validates the config contract, prepares the output directory, and
-        returns a structured result that can be extended by the modular pipeline as
-        each checkpoint is implemented.
-        """
         logger.info("Starting Kd pipeline for %s", self.timestamp)
         logger.info("Output directory: %s", self.output_path)
+
+        request = DataRequest(
+            spatial=self.args.spatial,
+            date_range=(
+                str(self.args.temporal[0])[:10],
+                str(self.args.temporal[1])[:10],
+            ),
+            need_atl03=True,
+            need_atl24=True,
+            get_gebco=True,
+            atl03_version=self.args.atl03_version,
+        )
+        acquired = request.get_sliderule_data()
+        photons = acquired.photons if isinstance(acquired, DataRequest) else acquired
 
         return {
             "timestamp": self.timestamp,
             "output_path": self.output_path,
-            "config": self.args.model_dump(mode="json")
-            if hasattr(self.args, "model_dump")
-            else dict(self.args),
+            "config": self.args.model_dump(mode="json"),
+            "products": request.products,
+            "sources": request.sources,
+            "metadata": request.metadata,
+            "photons": photons,
+            "kd": None,
+            "stage_diagnostics": {},
         }
 
 
 def run_pipeline(args: KdConfig | Any):
-    """Library-facing wrapper used by notebooks and tests.
-
-    A pipeline object is created from the validated configuration and executed.
-    This wrapper keeps the front-end API stable while the underlying workflow is
-    being migrated to the modular data-acquisition + GeoDataFrame architecture.
-    """
-    pipeline = AOKPipeline(args)
-    return pipeline.run()
+    """Library-facing API used by notebooks and tests."""
+    return AOKPipeline(args).run()
 
 
 if __name__ == "__main__":

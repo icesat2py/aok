@@ -36,6 +36,23 @@ refraction_wavelength_nm: 532.0  # nanometers
 post_refraction_refit_enabled: false
 surface_wave_trim_min_m: 1.0  # minimum surface/wave exclusion depth (meters)
 
+# Histogram quality gates (depth bands are positive-down from the fitted surface)
+histogram_quality_enabled: false
+histogram_quality_min_ratio: 0.05
+histogram_quality_depth_min_m: 6.0
+histogram_quality_depth_max_m: 7.0
+histogram_quality_reference_min_m: 0.0
+histogram_quality_reference_max_m: 1.0
+minimum_photons_per_decay_bin: 2
+minimum_column_photons: 30
+minimum_breakpoint_depth_m: 5.0
+minimum_decay_zone_bins: 8
+minimum_decay_range_m: 5.0
+minimum_seabed_depth_m: 5.0
+atl24_match_tolerance_m: 100.0
+minimum_kd: 0.01
+maximum_kd: 2.0
+
 # Decay zone detection
 decay_zone_threshold: 0.0  # fraction of peak photon count
 
