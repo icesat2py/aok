@@ -11,7 +11,6 @@ from .interpolation import (
     apply_interpolation,
     geoid_correction,
     interpolate_labels,
-    refraction_correction,
 )
 from .Kd_analysis import CalculateKdFromFilteredSubsurfacePhoton
 from .sea_photons_analysis import *
