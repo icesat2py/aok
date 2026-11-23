@@ -29,6 +29,12 @@ solar_elev_threshold: 6.0  # degrees
 solar_bg_median_window_deg: 10.0  # degrees of solar elevation
 solar_bg_noise_multiplier: 1.5  # ratio of actual/expected background rate
 solar_bg_min_signal_conf: 2  # minimum photon signal confidence
+surface_sigma_max_m: 0.43  # maximum fitted surface Gaussian sigma (meters)
+refraction_enabled: false
+refraction_water_temp_c: 20.0  # degrees Celsius
+refraction_wavelength_nm: 532.0  # nanometers
+post_refraction_refit_enabled: false
+surface_wave_trim_min_m: 1.0  # minimum surface/wave exclusion depth (meters)
 
 # Decay zone detection
 decay_zone_threshold: 0.0  # fraction of peak photon count

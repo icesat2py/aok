@@ -38,6 +38,12 @@ class KdConfig(BaseModel):
     solar_bg_median_window_deg: float = Field(default=10.0, gt=0.0)
     solar_bg_noise_multiplier: float = Field(default=1.5, gt=0.0)
     solar_bg_min_signal_conf: int = Field(default=2, ge=0)
+    surface_sigma_max_m: float = Field(default=0.43, gt=0.0)
+    refraction_enabled: bool = Field(default=False)
+    refraction_water_temp_c: float = Field(default=20.0)
+    refraction_wavelength_nm: float = Field(default=532.0, gt=0.0)
+    post_refraction_refit_enabled: bool = Field(default=False)
+    surface_wave_trim_min_m: float = Field(default=1.0, gt=0.0)
     spatial: list[float] = Field(
         default_factory=lambda: [-150.622053, 61.045382, -150.361757, 61.171146]
     )
