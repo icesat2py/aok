@@ -13,6 +13,10 @@ SPATIAL_BOUNDS_ERROR = "spatial bounds cannot be the zeroed default extent"
 TEMPORAL_BOUNDS_ERROR = "temporal bounds cannot be the placeholder date range"
 HORIZONTAL_RES_ERROR = "horizontal_res must be positive"
 VERTICAL_RES_ERROR = "vertical_res must be positive"
+SOLAR_ELEVATION_ERROR = "solar_elev_threshold must be at least 0 degrees"
+SOLAR_WINDOW_ERROR = "solar_bg_median_window_deg must be positive"
+SOLAR_MULTIPLIER_ERROR = "solar_bg_noise_multiplier must be positive"
+SOLAR_CONFIDENCE_ERROR = "solar_bg_min_signal_conf must be at least 0"
 
 
 class KdConfig(BaseModel):
@@ -30,10 +34,10 @@ class KdConfig(BaseModel):
     subsurface_thresh: float | None = Field(default=1.0)
     ignore_subsurface_height_thres: float | None = Field(default=-6.0)
     solar_bg_filter: bool = Field(default=True)
-    solar_elev_threshold: float = Field(default=6.0)
-    solar_bg_median_window_deg: float = Field(default=10.0)
-    solar_bg_noise_multiplier: float = Field(default=1.5)
-    solar_bg_min_signal_conf: int = Field(default=2)
+    solar_elev_threshold: float = Field(default=6.0, ge=0.0)
+    solar_bg_median_window_deg: float = Field(default=10.0, gt=0.0)
+    solar_bg_noise_multiplier: float = Field(default=1.5, gt=0.0)
+    solar_bg_min_signal_conf: int = Field(default=2, ge=0)
     spatial: list[float] = Field(
         default_factory=lambda: [-150.622053, 61.045382, -150.361757, 61.171146]
     )
@@ -79,6 +83,18 @@ def check_config_values(config: KdConfig) -> None:
 
     if config.vertical_res <= 0:
         raise ValueError(VERTICAL_RES_ERROR)
+
+    if config.solar_elev_threshold < 0:
+        raise ValueError(SOLAR_ELEVATION_ERROR)
+
+    if config.solar_bg_median_window_deg <= 0:
+        raise ValueError(SOLAR_WINDOW_ERROR)
+
+    if config.solar_bg_noise_multiplier <= 0:
+        raise ValueError(SOLAR_MULTIPLIER_ERROR)
+
+    if config.solar_bg_min_signal_conf < 0:
+        raise ValueError(SOLAR_CONFIDENCE_ERROR)
 
 
 def get_args(config_path: str | Path | None = None) -> KdConfig:
